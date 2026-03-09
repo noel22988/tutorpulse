@@ -219,6 +219,23 @@ const css = `
 `;
 
 // ── Utility Functions ───────────────────────────────────────
+const LEVEL_OPTIONS = [
+  { value: "P1", label: "Primary 1" }, { value: "P2", label: "Primary 2" }, { value: "P3", label: "Primary 3" },
+  { value: "P4", label: "Primary 4" }, { value: "P5", label: "Primary 5" }, { value: "P6", label: "Primary 6" },
+  { value: "Sec 1", label: "Secondary 1" }, { value: "Sec 2", label: "Secondary 2" },
+  { value: "Sec 3", label: "Secondary 3" }, { value: "Sec 4", label: "Secondary 4" },
+  { value: "Sec 5", label: "Secondary 5" },
+  { value: "JC 1", label: "JC 1" },
+];
+const STREAM_OPTIONS = [
+  { value: "小学普华", label: "小学普华" },
+  { value: "小学高华", label: "小学高华" },
+  { value: "G1华文", label: "G1华文" },
+  { value: "G2华文", label: "G2华文" },
+  { value: "G3华文", label: "G3华文" },
+  { value: "中学高华", label: "中学高华" },
+  { value: "H1华文", label: "H1华文" },
+];
 const formatDate = (d) => {
   const date = new Date(d);
   return date.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
@@ -1020,20 +1037,21 @@ export default function TutorPulse() {
               </div>
             </Card>
 
-            {/* Student breakdown */}
+            {/* Student breakdown by stream */}
             <Card>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Student Breakdown</h3>
-              {[
-                { label: "Primary 5 (华文)", count: store.students.filter(s => s.level === "P5").length, color: theme.accent },
-                { label: "Primary 6 (高级华文)", count: store.students.filter(s => s.level === "P6").length, color: theme.info },
-                { label: "Secondary (O-Level)", count: store.students.filter(s => s.level.startsWith("Sec")).length, color: theme.purple },
-              ].map((item, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: i > 0 ? `1px solid ${theme.border}` : "none" }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 3, background: item.color }} />
-                  <span style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>{item.label}</span>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>{item.count}</span>
-                </div>
-              ))}
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Students by Stream</h3>
+              {(() => {
+                const colors = [theme.accent, theme.info, theme.purple, theme.success, theme.warning, theme.danger, theme.textSecondary];
+                const streams = {};
+                store.students.forEach((s) => { streams[s.stream] = (streams[s.stream] || 0) + 1; });
+                return Object.entries(streams).map(([stream, count], i) => (
+                  <div key={stream} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: i > 0 ? "1px solid " + theme.border : "none" }}>
+                    <div style={{ width: 10, height: 10, borderRadius: 3, background: colors[i % colors.length] }} />
+                    <span style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>{stream}</span>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{count}</span>
+                  </div>
+                ));
+              })()}
             </Card>
           </>
         )}
@@ -1359,15 +1377,15 @@ export default function TutorPulse() {
 
   // ── New Student Modal ──────────────────────────────────────
   const NewStudentModal = () => {
-    const [form, setForm] = useState({ name: "", level: "P5", stream: "华文", parent: "", parentPhone: "", parentEmail: "", sessionRate: "70", notes: "" });
+    const [form, setForm] = useState({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", sessionRate: "70", notes: "" });
     const updateForm = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
     return (
       <Modal open={showNewStudent} onClose={() => setShowNewStudent(false)} title="Add New Student">
         <Input label="Student Name" value={form.name} onChange={(v) => updateForm("name", v)} placeholder="Full name" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Select label="Level" value={form.level} onChange={(v) => updateForm("level", v)} options={[{ value: "P4", label: "Primary 4" }, { value: "P5", label: "Primary 5" }, { value: "P6", label: "Primary 6" }, { value: "Sec 1", label: "Secondary 1" }, { value: "Sec 2", label: "Secondary 2" }, { value: "Sec 3", label: "Secondary 3" }, { value: "Sec 4", label: "Secondary 4" }]} />
-          <Select label="Stream" value={form.stream} onChange={(v) => updateForm("stream", v)} options={[{ value: "华文", label: "华文" }, { value: "高级华文", label: "高级华文" }, { value: "O-Level Chinese", label: "O-Level Chinese" }]} />
+          <Select label="Level" value={form.level} onChange={(v) => updateForm("level", v)} options={LEVEL_OPTIONS} />
+          <Select label="Stream" value={form.stream} onChange={(v) => updateForm("stream", v)} options={STREAM_OPTIONS} />
         </div>
         <Input label="Parent Name" value={form.parent} onChange={(v) => updateForm("parent", v)} placeholder="Parent/Guardian name" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1475,8 +1493,8 @@ export default function TutorPulse() {
             {/* Edit Mode */}
             <Input label="Student Name" value={editForm.name} onChange={(v) => uf("name", v)} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Select label="Level" value={editForm.level} onChange={(v) => uf("level", v)} options={[{ value: "P4", label: "Primary 4" }, { value: "P5", label: "Primary 5" }, { value: "P6", label: "Primary 6" }, { value: "Sec 1", label: "Secondary 1" }, { value: "Sec 2", label: "Secondary 2" }, { value: "Sec 3", label: "Secondary 3" }, { value: "Sec 4", label: "Secondary 4" }]} />
-              <Select label="Stream" value={editForm.stream} onChange={(v) => uf("stream", v)} options={[{ value: "华文", label: "华文" }, { value: "高级华文", label: "高级华文" }, { value: "O-Level Chinese", label: "O-Level Chinese" }]} />
+              <Select label="Level" value={editForm.level} onChange={(v) => uf("level", v)} options={LEVEL_OPTIONS} />
+              <Select label="Stream" value={editForm.stream} onChange={(v) => uf("stream", v)} options={STREAM_OPTIONS} />
             </div>
             <Input label="Parent Name" value={editForm.parent} onChange={(v) => uf("parent", v)} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
