@@ -1084,13 +1084,21 @@ export default function TutorPulse() {
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8 }}>DATA MANAGEMENT</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <Button size="sm" variant="danger" icon="trash" onClick={() => {
-                  if (window.confirm("Reset all data? This cannot be undone.")) {
+                  if (window.confirm("Reset all data? This will remove all students, lessons, payments and messages. This cannot be undone.")) {
+                    const emptyStore = { students: [], lessons: [], payments: [], messages: [], notifications: [] };
+                    setStore(emptyStore);
+                    saveStore(emptyStore);
+                    addToast("All data cleared");
+                  }
+                }}>Clear All Data</Button>
+                <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
+                  if (window.confirm("Reload sample data? This will replace your current data with demo data.")) {
                     const fresh = createStore();
                     setStore(fresh);
                     saveStore(fresh);
-                    addToast("Data reset to defaults");
+                    addToast("Sample data loaded");
                   }
-                }}>Reset All Data</Button>
+                }}>Load Sample Data</Button>
               </div>
               <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Your data is saved automatically and persists between sessions.</div>
             </Card>
@@ -1239,31 +1247,30 @@ export default function TutorPulse() {
   const NewLessonModal = () => {
     const [form, setForm] = useState({ studentId: store.students[0]?.id || "", date: "", time: "10:00", duration: "90", subject: "", location: "Home Studio" });
     const [isRecurring, setIsRecurring] = useState(false);
-    const [recurDay, setRecurDay] = useState("1"); // 0=Sun, 1=Mon...
+    const [recurDay, setRecurDay] = useState("1");
     const [recurTime, setRecurTime] = useState("10:00");
-    const [recurWeeks, setRecurWeeks] = useState("4");
     const [recurStartDate, setRecurStartDate] = useState("");
+    const [recurEndDate, setRecurEndDate] = useState("");
     const [previewDates, setPreviewDates] = useState([]);
     const updateForm = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-    // Generate preview dates for recurring
+    // Generate preview dates between start and end
     useEffect(() => {
-      if (!isRecurring) { setPreviewDates([]); return; }
+      if (!isRecurring || !recurStartDate || !recurEndDate) { setPreviewDates([]); return; }
       const dates = [];
       const dayNum = parseInt(recurDay);
-      const weeks = parseInt(recurWeeks);
-      let start = recurStartDate ? new Date(recurStartDate + "T00:00:00") : new Date();
-      // Find next occurrence of the selected day
-      while (start.getDay() !== dayNum) {
-        start.setDate(start.getDate() + 1);
+      const end = new Date(recurEndDate + "T23:59:59");
+      let cursor = new Date(recurStartDate + "T00:00:00");
+      // Find first occurrence of the selected day on or after start
+      while (cursor.getDay() !== dayNum) {
+        cursor.setDate(cursor.getDate() + 1);
       }
-      for (let i = 0; i < weeks; i++) {
-        const d = new Date(start);
-        d.setDate(d.getDate() + (i * 7));
-        dates.push(d);
+      while (cursor <= end) {
+        dates.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 7);
       }
       setPreviewDates(dates);
-    }, [isRecurring, recurDay, recurWeeks, recurStartDate]);
+    }, [isRecurring, recurDay, recurStartDate, recurEndDate]);
 
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -1296,7 +1303,7 @@ export default function TutorPulse() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Input label="Starting from" type="date" value={recurStartDate} onChange={setRecurStartDate} />
-              <Select label="Number of Weeks" value={recurWeeks} onChange={setRecurWeeks} options={[{ value: "2", label: "2 weeks" }, { value: "4", label: "4 weeks" }, { value: "6", label: "6 weeks" }, { value: "8", label: "8 weeks" }, { value: "10", label: "10 weeks" }, { value: "12", label: "12 weeks" }]} />
+              <Input label="Ending on" type="date" value={recurEndDate} onChange={setRecurEndDate} />
             </div>
             {previewDates.length > 0 && (
               <div style={{ marginBottom: 16, padding: 12, background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
@@ -1324,7 +1331,7 @@ export default function TutorPulse() {
             if (!form.studentId) { addToast("Please select a student", "error"); return; }
             const subj = form.subject || "Chinese Lesson";
             if (isRecurring) {
-              if (previewDates.length === 0) { addToast("Please set a start date", "error"); return; }
+              if (previewDates.length === 0) { addToast("Please set both start and end dates", "error"); return; }
               const hours = parseInt(recurTime.split(":")[0]);
               const mins = parseInt(recurTime.split(":")[1]);
               let count = 0;
