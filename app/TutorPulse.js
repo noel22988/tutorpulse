@@ -16,14 +16,14 @@ const createStore = () => {
   const m = now.getMonth();
 
   const students = [
-    { id: "s1", name: "Ethan Tan", level: "P5", stream: "华文", parent: "Mrs. Tan", parentPhone: "+65 9123 4567", parentEmail: "tan.mei@email.com", sessionRate: 70, status: "active", joinDate: "2025-01-15", notes: "Needs extra help with 作文", avatar: "ET" },
-    { id: "s2", name: "Chloe Wong", level: "P6", stream: "高级华文", parent: "Mr. Wong", parentPhone: "+65 9234 5678", parentEmail: "wong.kh@email.com", sessionRate: 80, status: "active", joinDate: "2024-08-01", notes: "Preparing for PSLE, strong in 阅读理解", avatar: "CW" },
-    { id: "s3", name: "Ryan Lim", level: "Sec 3", stream: "O-Level Chinese", parent: "Mrs. Lim", parentPhone: "+65 9345 6789", parentEmail: "lim.sy@email.com", sessionRate: 90, status: "active", joinDate: "2025-03-01", notes: "Focus on Paper 1 Email Writing", avatar: "RL" },
-    { id: "s4", name: "Sophie Chen", level: "P5", stream: "华文", parent: "Mrs. Chen", parentPhone: "+65 9456 7890", parentEmail: "chen.jy@email.com", sessionRate: 70, status: "active", joinDate: "2024-06-15", notes: "Good progress, encourage more 口试 practice", avatar: "SC" },
-    { id: "s5", name: "Marcus Lee", level: "Sec 4", stream: "O-Level Chinese", parent: "Mr. Lee", parentPhone: "+65 9567 8901", parentEmail: "lee.wt@email.com", sessionRate: 90, status: "active", joinDate: "2024-03-01", notes: "Final year, intensive revision needed", avatar: "ML" },
-    { id: "s6", name: "Alyssa Ng", level: "P6", stream: "高级华文", parent: "Mrs. Ng", parentPhone: "+65 9678 9012", parentEmail: "ng.lh@email.com", sessionRate: 80, status: "trial", joinDate: "2025-02-20", notes: "Trial lesson completed, parents considering", avatar: "AN" },
-    { id: "s7", name: "Dylan Koh", level: "P5", stream: "华文", parent: "Mr. Koh", parentPhone: "+65 9789 0123", parentEmail: "koh.ah@email.com", sessionRate: 70, status: "paused", joinDate: "2024-09-01", notes: "On pause — family holiday till mid-March", avatar: "DK" },
-    { id: "s8", name: "Isabella Teo", level: "Sec 2", stream: "O-Level Chinese", parent: "Mrs. Teo", parentPhone: "+65 9890 1234", parentEmail: "teo.ml@email.com", sessionRate: 80, status: "active", joinDate: "2025-01-10", notes: "Building foundation for upper sec", avatar: "IT" },
+    { id: "s1", name: "Ethan Tan", level: "P5", stream: "华文", parent: "Mrs. Tan", parentPhone: "+65 9123 4567", parentEmail: "tan.mei@email.com", hourlyRate: 70, status: "active", joinDate: "2025-01-15", notes: "Needs extra help with 作文", avatar: "ET" },
+    { id: "s2", name: "Chloe Wong", level: "P6", stream: "高级华文", parent: "Mr. Wong", parentPhone: "+65 9234 5678", parentEmail: "wong.kh@email.com", hourlyRate: 80, status: "active", joinDate: "2024-08-01", notes: "Preparing for PSLE, strong in 阅读理解", avatar: "CW" },
+    { id: "s3", name: "Ryan Lim", level: "Sec 3", stream: "O-Level Chinese", parent: "Mrs. Lim", parentPhone: "+65 9345 6789", parentEmail: "lim.sy@email.com", hourlyRate: 90, status: "active", joinDate: "2025-03-01", notes: "Focus on Paper 1 Email Writing", avatar: "RL" },
+    { id: "s4", name: "Sophie Chen", level: "P5", stream: "华文", parent: "Mrs. Chen", parentPhone: "+65 9456 7890", parentEmail: "chen.jy@email.com", hourlyRate: 70, status: "active", joinDate: "2024-06-15", notes: "Good progress, encourage more 口试 practice", avatar: "SC" },
+    { id: "s5", name: "Marcus Lee", level: "Sec 4", stream: "O-Level Chinese", parent: "Mr. Lee", parentPhone: "+65 9567 8901", parentEmail: "lee.wt@email.com", hourlyRate: 90, status: "active", joinDate: "2024-03-01", notes: "Final year, intensive revision needed", avatar: "ML" },
+    { id: "s6", name: "Alyssa Ng", level: "P6", stream: "高级华文", parent: "Mrs. Ng", parentPhone: "+65 9678 9012", parentEmail: "ng.lh@email.com", hourlyRate: 80, status: "trial", joinDate: "2025-02-20", notes: "Trial lesson completed, parents considering", avatar: "AN" },
+    { id: "s7", name: "Dylan Koh", level: "P5", stream: "华文", parent: "Mr. Koh", parentPhone: "+65 9789 0123", parentEmail: "koh.ah@email.com", hourlyRate: 70, status: "paused", joinDate: "2024-09-01", notes: "On pause — family holiday till mid-March", avatar: "DK" },
+    { id: "s8", name: "Isabella Teo", level: "Sec 2", stream: "O-Level Chinese", parent: "Mrs. Teo", parentPhone: "+65 9890 1234", parentEmail: "teo.ml@email.com", hourlyRate: 80, status: "active", joinDate: "2025-01-10", notes: "Building foundation for upper sec", avatar: "IT" },
   ];
 
   const lessons = [
@@ -69,7 +69,9 @@ const createStore = () => {
     { id: "n4", type: "system", text: "Monthly revenue report ready", time: "1d ago", read: true },
   ];
 
-  return { students, lessons, payments, messages, notifications };
+  const revenueHistory = [];
+
+  return { students, lessons, payments, messages, notifications, revenueHistory };
 };
 
 // ── Persistence helpers ─────────────────────────────────────
@@ -395,9 +397,14 @@ export default function TutorPulse() {
     });
   }, []);
 
-  // ── Save to persistent storage on every store change ────────
+  // ── Save to persistent storage (debounced to avoid typing lag) ──
+  const saveTimerRef = useRef(null);
   useEffect(() => {
-    if (loaded) saveStore(store);
+    if (loaded) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => saveStore(store), 500);
+    }
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [store, loaded]);
   const [adminTab, setAdminTab] = useState("overview");
 
@@ -436,18 +443,20 @@ export default function TutorPulse() {
 
   const getStudent = useCallback((id) => store.students.find((s) => s.id === id), [store.students]);
 
-  // ── Per-session → Monthly fee calculator ────────────────────
-  // Counts confirmed + completed + pending lessons (not cancelled) for a student in a given month
+  // ── Hourly rate → Monthly fee calculator ─────────────────────
+  // Sums (hourlyRate × hours) for each non-cancelled lesson in the month
   const calcMonthlyFee = useCallback((studentId, monthStr) => {
-    // monthStr = "2026-03"
     const s = store.students.find((st) => st.id === studentId);
-    if (!s) return { sessions: 0, rate: 0, total: 0 };
+    if (!s) return { sessions: 0, rate: 0, totalHours: 0, total: 0 };
     const [y, mo] = monthStr.split("-").map(Number);
-    const sessions = store.lessons.filter((l) => {
+    const lessons = store.lessons.filter((l) => {
       const d = new Date(l.date);
       return l.studentId === studentId && d.getFullYear() === y && d.getMonth() === mo - 1 && l.status !== "cancelled";
     });
-    return { sessions: sessions.length, rate: s.sessionRate, total: sessions.length * s.sessionRate };
+    const totalMinutes = lessons.reduce((sum, l) => sum + l.duration, 0);
+    const totalHours = totalMinutes / 60;
+    const total = Math.round(s.hourlyRate * totalHours * 100) / 100;
+    return { sessions: lessons.length, rate: s.hourlyRate, totalHours, total };
   }, [store.students, store.lessons]);
 
   const todayLessons = useMemo(() => {
@@ -753,8 +762,8 @@ export default function TutorPulse() {
                   <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} · {student.stream}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 700, color: theme.accent }}>${student.sessionRate}</div>
-                  <div style={{ fontSize: 11, color: theme.textMuted }}>/ session</div>
+                  <div style={{ fontWeight: 700, color: theme.accent }}>${student.hourlyRate}</div>
+                  <div style={{ fontSize: 11, color: theme.textMuted }}>/ hr</div>
                 </div>
               </div>
             </Card>
@@ -787,7 +796,7 @@ export default function TutorPulse() {
     }).map((p) => {
       // Dynamically calculate amount from sessions
       const calc = calcMonthlyFee(p.studentId, p.month);
-      return { ...p, amount: calc.total, sessions: calc.sessions, rate: calc.rate };
+      return { ...p, amount: calc.total, sessions: calc.sessions, rate: calc.rate, totalHours: calc.totalHours };
     });
 
     const totalDue = filtered.reduce((s, p) => s + p.amount, 0);
@@ -857,7 +866,7 @@ export default function TutorPulse() {
                     <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{student ? student.name : "Unknown"}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Badge text={payment.status} color={getStatusColor(payment.status)} bg={getStatusBg(payment.status)} />
-                      <span style={{ fontSize: 11, color: theme.textMuted }}>{payment.sessions} sessions × ${payment.rate}</span>
+                      <span style={{ fontSize: 11, color: theme.textMuted }}>{payment.sessions} sessions · {payment.totalHours}h × ${payment.rate}/hr</span>
                       {payment.method && <span style={{ fontSize: 11, color: theme.textMuted }}>· {payment.method}</span>}
                     </div>
                   </div>
@@ -1000,11 +1009,21 @@ export default function TutorPulse() {
     const lastMonthStr = new Date().getMonth() === 0 ? (new Date().getFullYear() - 1) + "-12" : new Date().getFullYear() + "-" + String(new Date().getMonth()).padStart(2, "0");
     const collectionRate = store.payments.filter(p => p.month === lastMonthStr).length > 0 ? Math.round(store.payments.filter(p => p.month === lastMonthStr && p.status === "paid").length / store.payments.filter(p => p.month === lastMonthStr).length * 100) : 0;
 
-    const revenueData = [
-      { month: "Sep", amount: 5600 }, { month: "Oct", amount: 6200 }, { month: "Nov", amount: 5900 },
-      { month: "Dec", amount: 3800 }, { month: "Jan", amount: 6800 }, { month: "Feb", amount: monthlyRevenue },
-    ];
-    const maxRevenue = Math.max(...revenueData.map(d => d.amount));
+    const revenueData = (() => {
+      const data = [];
+      const now = new Date();
+      const history = store.revenueHistory || [];
+      for (let i = 5; i >= 1; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+        const label = d.toLocaleDateString("en-SG", { month: "short" });
+        const entry = history.find(h => h.month === key);
+        data.push({ month: label, amount: entry ? entry.amount : 0 });
+      }
+      data.push({ month: now.toLocaleDateString("en-SG", { month: "short" }), amount: totalMonthly });
+      return data;
+    })();
+    const maxRevenue = Math.max(...revenueData.map(d => d.amount), 1);
 
     return (
       <div className="fade-in">
@@ -1076,7 +1095,7 @@ export default function TutorPulse() {
                 {activeStudents.map((s) => (
                   <div key={s.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: theme.textSecondary }}>
                     <span>{s.name} ({s.level})</span>
-                    <span style={{ fontWeight: 600, color: theme.text }}>${s.sessionRate}/session</span>
+                    <span style={{ fontWeight: 600, color: theme.text }}>${s.hourlyRate}/hr</span>
                   </div>
                 ))}
               </div>
@@ -1092,25 +1111,112 @@ export default function TutorPulse() {
                   <Avatar initials={student.avatar} size={36} color={getStatusColor(student.status)} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{student.name}</div>
-                    <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} · ${student.sessionRate}/session</div>
+                    <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} · ${student.hourlyRate}/hr</div>
                   </div>
                   <Badge text={student.status} color={getStatusColor(student.status)} bg={getStatusBg(student.status)} />
                 </div>
               </Card>
             ))}
-            <Card style={{ marginTop: 16, padding: 14, borderColor: theme.danger + "44" }}>
-              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8 }}>DATA MANAGEMENT</div>
+
+            {/* Export / Import */}
+            <Card style={{ marginTop: 16, padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>BACKUP & RESTORE</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "tutorpulse-backup-" + new Date().toISOString().split("T")[0] + ".json";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  addToast("Backup downloaded");
+                }}>Export Backup</Button>
+                <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = ".json";
+                  input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      try {
+                        const data = JSON.parse(ev.target.result);
+                        if (data.students && data.lessons) {
+                          if (window.confirm("Replace all current data with this backup?")) {
+                            setStore(data);
+                            saveStore(data);
+                            addToast("Backup restored successfully");
+                          }
+                        } else {
+                          addToast("Invalid backup file", "error");
+                        }
+                      } catch (err) {
+                        addToast("Failed to read file", "error");
+                      }
+                    };
+                    reader.readAsText(file);
+                  };
+                  input.click();
+                }}>Import Backup</Button>
+              </div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Export your data regularly as a backup. Import restores everything from a backup file.</div>
+            </Card>
+
+            {/* Revenue History Editor */}
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>PAST REVENUE (for chart)</div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Enter your actual monthly revenue for the past months. These appear on the Revenue Trend chart.</div>
+              {(() => {
+                const history = store.revenueHistory || [];
+                const months = [];
+                const now = new Date();
+                for (let i = 5; i >= 1; i--) {
+                  const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                  const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+                  const label = d.toLocaleDateString("en-SG", { month: "short", year: "numeric" });
+                  const existing = history.find(h => h.month === key);
+                  months.push({ key, label, amount: existing ? existing.amount : "" });
+                }
+                return months.map((m) => (
+                  <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: theme.textSecondary, width: 70, flexShrink: 0 }}>{m.label}</span>
+                    <span style={{ fontSize: 13, color: theme.textMuted }}>$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0"
+                      defaultValue={m.amount}
+                      onBlur={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setStore((s) => {
+                          const hist = (s.revenueHistory || []).filter(h => h.month !== m.key);
+                          if (val > 0) hist.push({ month: m.key, amount: val });
+                          return { ...s, revenueHistory: hist };
+                        });
+                      }}
+                      style={{ flex: 1, padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}
+                    />
+                  </div>
+                ));
+              })()}
+            </Card>
+
+            {/* Data Reset */}
+            <Card style={{ padding: 14, borderColor: theme.danger + "44" }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8 }}>DANGER ZONE</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <Button size="sm" variant="danger" icon="trash" onClick={() => {
-                  if (window.confirm("Reset all data? This will remove all students, lessons, payments and messages. This cannot be undone.")) {
-                    const emptyStore = { students: [], lessons: [], payments: [], messages: [], notifications: [] };
+                  if (window.confirm("Clear ALL data? This will remove all students, lessons, payments and messages. This cannot be undone.")) {
+                    const emptyStore = { students: [], lessons: [], payments: [], messages: [], notifications: [], revenueHistory: [] };
                     setStore(emptyStore);
                     saveStore(emptyStore);
                     addToast("All data cleared");
                   }
                 }}>Clear All Data</Button>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
-                  if (window.confirm("Reload sample data? This will replace your current data with demo data.")) {
+                  if (window.confirm("Load sample data? This replaces your current data with demo data.")) {
                     const fresh = createStore();
                     setStore(fresh);
                     saveStore(fresh);
@@ -1118,7 +1224,6 @@ export default function TutorPulse() {
                   }
                 }}>Load Sample Data</Button>
               </div>
-              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Your data is saved automatically and persists between sessions.</div>
             </Card>
           </div>
         )}
@@ -1377,7 +1482,7 @@ export default function TutorPulse() {
 
   // ── New Student Modal ──────────────────────────────────────
   const NewStudentModal = () => {
-    const [form, setForm] = useState({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", sessionRate: "70", notes: "" });
+    const [form, setForm] = useState({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", notes: "" });
     const updateForm = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
     return (
@@ -1392,13 +1497,13 @@ export default function TutorPulse() {
           <Input label="Phone" value={form.parentPhone} onChange={(v) => updateForm("parentPhone", v)} placeholder="+65 9XXX XXXX" />
           <Input label="Email" value={form.parentEmail} onChange={(v) => updateForm("parentEmail", v)} placeholder="email@example.com" />
         </div>
-        <Input label="Rate per Session ($)" type="number" value={form.sessionRate} onChange={(v) => updateForm("sessionRate", v)} />
+        <Input label="Hourly Rate ($)" type="number" value={form.hourlyRate} onChange={(v) => updateForm("hourlyRate", v)} />
         <Input label="Notes" value={form.notes} onChange={(v) => updateForm("notes", v)} multiline placeholder="Any notes about the student..." />
         <div style={{ display: "flex", gap: 8 }}>
           <Button onClick={() => {
             if (!form.name) { addToast("Please enter student name", "error"); return; }
             const initials = form.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2);
-            addStudent({ name: form.name, level: form.level, stream: form.stream, parent: form.parent, parentPhone: form.parentPhone, parentEmail: form.parentEmail, sessionRate: parseInt(form.sessionRate) || 70, status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: form.notes, avatar: initials });
+            addStudent({ name: form.name, level: form.level, stream: form.stream, parent: form.parent, parentPhone: form.parentPhone, parentEmail: form.parentEmail, hourlyRate: parseFloat(form.hourlyRate) || 70, status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: form.notes, avatar: initials });
             setShowNewStudent(false);
           }}>Add Student</Button>
           <Button variant="secondary" onClick={() => setShowNewStudent(false)}>Cancel</Button>
@@ -1412,7 +1517,7 @@ export default function TutorPulse() {
     if (!selectedStudent) return null;
     const [editing, setEditing] = useState(false);
     const [editForm, setEditForm] = useState({});
-    const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+    const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
 
     const startEdit = () => {
       setEditForm({
@@ -1422,7 +1527,7 @@ export default function TutorPulse() {
         parent: selectedStudent.parent,
         parentPhone: selectedStudent.parentPhone,
         parentEmail: selectedStudent.parentEmail,
-        sessionRate: String(selectedStudent.sessionRate),
+        hourlyRate: String(selectedStudent.hourlyRate),
         notes: selectedStudent.notes || "",
         status: selectedStudent.status,
       });
@@ -1437,7 +1542,7 @@ export default function TutorPulse() {
         parent: editForm.parent,
         parentPhone: editForm.parentPhone,
         parentEmail: editForm.parentEmail,
-        sessionRate: parseInt(editForm.sessionRate) || selectedStudent.sessionRate,
+        hourlyRate: parseFloat(editForm.hourlyRate) || selectedStudent.hourlyRate,
         notes: editForm.notes,
         status: editForm.status,
         avatar: editForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2),
@@ -1464,8 +1569,8 @@ export default function TutorPulse() {
                 <Badge text={selectedStudent.status} color={getStatusColor(selectedStudent.status)} bg={getStatusBg(selectedStudent.status)} />
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: theme.accent, fontFamily: "'Playfair Display', serif" }}>${selectedStudent.sessionRate}</div>
-                <div style={{ fontSize: 11, color: theme.textMuted }}>per session</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: theme.accent, fontFamily: "'Playfair Display', serif" }}>${selectedStudent.hourlyRate}</div>
+                <div style={{ fontSize: 11, color: theme.textMuted }}>per hour</div>
               </div>
             </div>
 
@@ -1502,7 +1607,7 @@ export default function TutorPulse() {
               <Input label="Email" value={editForm.parentEmail} onChange={(v) => uf("parentEmail", v)} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Input label="Rate / Session ($)" type="number" value={editForm.sessionRate} onChange={(v) => uf("sessionRate", v)} />
+              <Input label="Hourly Rate ($)" type="number" value={editForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} />
               <Select label="Status" value={editForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }]} />
             </div>
             <Input label="Notes" value={editForm.notes} onChange={(v) => uf("notes", v)} multiline />
@@ -1518,7 +1623,7 @@ export default function TutorPulse() {
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>LESSONS</div>
           {studentLessons.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, padding: "8px 0" }}>No lessons yet</div>}
-          {studentLessons.slice(0, 6).map((l) => (
+          {studentLessons.map((l) => (
             <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1537,9 +1642,6 @@ export default function TutorPulse() {
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); updateLesson(l.id, { status: "cancelled" }); addToast(l.subject + " cancelled"); }} style={{ padding: "3px 10px", borderRadius: 6, border: "none", background: theme.dangerBg, color: theme.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
                     <Icon name="x" size={11} color={theme.danger} /> Cancel
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); addToast("Reschedule coming soon"); }} style={{ padding: "3px 10px", borderRadius: 6, border: "none", background: theme.bgElevated, color: theme.textSecondary, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
-                    <Icon name="repeat" size={11} color={theme.textSecondary} /> Reschedule
                   </button>
                 </div>
               )}
@@ -1600,10 +1702,11 @@ export default function TutorPulse() {
         return l.studentId === sid && d.getMonth() === currentMonth && d.getFullYear() === currentYear && l.status !== "cancelled";
       }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-      const totalSessions = monthLessons.length || 4;
-      const ratePerSession = s.sessionRate;
+      const totalSessions = monthLessons.length;
+      const hourlyRate = s.hourlyRate;
       const totalMinutes = monthLessons.reduce((sum, l) => sum + l.duration, 0);
-      const totalFee = totalSessions * ratePerSession;
+      const totalHours = totalMinutes / 60;
+      const totalFee = Math.round(hourlyRate * totalHours * 100) / 100;
 
       const lessonLines = monthLessons.map((l) => {
         const d = new Date(l.date);
@@ -1620,11 +1723,11 @@ export default function TutorPulse() {
       const payment = store.payments.find((p) => p.studentId === sid && p.month === currentYear + "-" + String(currentMonth + 1).padStart(2, "0"));
 
       return {
-        student: s, monthName, monthLessons, totalSessions, ratePerSession, totalMinutes, lessonLines, cancelledLessons, payment,
+        student: s, monthName, monthLessons, totalSessions, hourlyRate, totalMinutes, totalHours, lessonLines, cancelledLessons, payment,
         paymentStatus: payment ? payment.status : "pending",
         totalFee: totalFee,
-        adjustment: cancelledLessons.length > 0 ? cancelledLessons.length * ratePerSession : 0,
-        finalAmount: totalFee - (cancelledLessons.length > 0 ? cancelledLessons.length * ratePerSession : 0),
+        adjustment: 0,
+        finalAmount: totalFee,
       };
     }, [store.lessons, store.payments, getStudent]);
 
@@ -1642,7 +1745,7 @@ export default function TutorPulse() {
           msg += "Here is " + inv.student.name + "'s tuition summary for *" + inv.monthName + "*:\n\n";
           // AI progress summary placeholder
           msg += "[AI_SUMMARY_PLACEHOLDER]\n\n";
-          msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalMinutes + " mins):*\n";
+          msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalHours + "h):*\n";
           inv.monthLessons.forEach((l) => {
             const d = new Date(l.date);
             const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
@@ -1651,15 +1754,12 @@ export default function TutorPulse() {
           });
           msg += "\n";
           if (inv.cancelledLessons.length > 0) {
-            msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) \u2014 -$" + inv.adjustment + "\n\n";
+            msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) excluded\n\n";
           }
           msg += "\uD83D\uDCB0 *Fee Breakdown:*\n";
-          msg += "  " + inv.totalSessions + " sessions \u00D7 $" + inv.ratePerSession + "/session = $" + inv.totalFee + "\n";
-          if (inv.cancelledLessons.length > 0) {
-            msg += "  Less " + inv.cancelledLessons.length + " cancelled: -$" + inv.adjustment + "\n";
-          }
+          msg += "  " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr\n";
           msg += "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
-          msg += "  *Total Due: $" + inv.finalAmount + "*\n\n";
+          msg += "  *Total Due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
           msg += "\uD83D\uDCB3 *Payment:* PayNow to UEN 202410124E\nPlease pay by the 10th. Thank you! \uD83D\uDE4F\n\n\u2014 Teacher Leon";
           return msg;
         },
@@ -1679,7 +1779,7 @@ export default function TutorPulse() {
           if (!inv) return "";
           let msg = "Hi " + inv.student.parent + ",\n\n";
           msg += "Here is " + inv.student.name + "'s tuition summary for *" + inv.monthName + "*:\n\n";
-          msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalMinutes + " mins):*\n";
+          msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalHours + "h):*\n";
           inv.monthLessons.forEach((l) => {
             const d = new Date(l.date);
             const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
@@ -1688,15 +1788,12 @@ export default function TutorPulse() {
           });
           msg += "\n";
           if (inv.cancelledLessons.length > 0) {
-            msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) \u2014 -$" + inv.adjustment + "\n\n";
+            msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) excluded\n\n";
           }
           msg += "\uD83D\uDCB0 *Fee Breakdown:*\n";
-          msg += "  " + inv.totalSessions + " sessions \u00D7 $" + inv.ratePerSession + "/session = $" + inv.totalFee + "\n";
-          if (inv.cancelledLessons.length > 0) {
-            msg += "  Less " + inv.cancelledLessons.length + " cancelled: -$" + inv.adjustment + "\n";
-          }
+          msg += "  " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr\n";
           msg += "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
-          msg += "  *Total Due: $" + inv.finalAmount + "*\n\n";
+          msg += "  *Total Due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
           msg += "\uD83D\uDCB3 *Payment:* PayNow to UEN 202410124E\nPlease pay by the 10th. Thank you! \uD83D\uDE4F\n\n\u2014 Teacher Leon";
           return msg;
         },
@@ -1709,8 +1806,8 @@ export default function TutorPulse() {
           if (!inv) return "";
           let msg = "Hi " + inv.student.parent + ",\n\n";
           msg += "Friendly reminder that " + inv.student.name + "'s *" + inv.monthName + "* tuition fee is due:\n\n";
-          msg += "\uD83D\uDCDA " + inv.totalSessions + " lessons (" + inv.totalMinutes + " min total)\n";
-          msg += "\uD83D\uDCB0 *Amount: $" + inv.finalAmount + "*\n";
+          msg += "\uD83D\uDCDA " + inv.totalSessions + " lessons (" + inv.totalHours + "h total)\n";
+          msg += "\uD83D\uDCB0 *Amount: $" + inv.finalAmount.toFixed(2) + "*\n";
           msg += "\uD83D\uDCB3 PayNow to UEN 202410124E\n\n";
           msg += "Ignore this if already paid! Thank you \uD83D\uDE4F\n\u2014 Teacher Leon";
           return msg;
@@ -1725,8 +1822,8 @@ export default function TutorPulse() {
           let msg = "Hi " + inv.student.parent + ",\n\n";
           msg += "I hope all is well! I noticed " + inv.student.name + "'s *" + inv.monthName + "* tuition fee is still outstanding.\n\n";
           msg += "*Details:*\n";
-          msg += "  " + inv.totalSessions + " sessions \u2014 " + inv.student.level + " " + inv.student.stream + "\n";
-          msg += "  *Amount due: $" + inv.finalAmount + "*\n\n";
+          msg += "  " + inv.totalSessions + " sessions (" + inv.totalHours + "h) \u2014 " + inv.student.level + " " + inv.student.stream + "\n";
+          msg += "  *Amount due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
           msg += "Kindly arrange payment via PayNow to UEN 202410124E at your earliest convenience.\n\nThank you for your understanding \uD83D\uDE4F\n\u2014 Teacher Leon";
           return msg;
         },
@@ -1871,7 +1968,7 @@ export default function TutorPulse() {
             <Avatar initials={student.avatar} size={40} />
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>{student.parent}</div>
-              <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.parentPhone} · {student.name} (${student.sessionRate}/session)</div>
+              <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.parentPhone} · {student.name} (${student.hourlyRate}/hr)</div>
             </div>
           </div>
         )}
