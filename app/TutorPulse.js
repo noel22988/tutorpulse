@@ -2088,7 +2088,7 @@ export default function TutorPulse() {
   const AIAssistantModal = () => {
     const [prompt, setPrompt] = useState("");
     const suggestions = [
-      "Draft a progress report for Ethan Tan's parents",
+      "Draft a progress report for",
       "What's my projected revenue for March?",
       "Suggest a lesson plan for P6 高级华文 阅读理解",
       "Write a mid-term assessment summary for all students",
