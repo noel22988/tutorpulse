@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import * as XLSX from "xlsx";
 
 // ═══════════════════════════════════════════════════════════════
 // TUTORPULSE — Intelligent Tutor Scheduling & Fee Management
@@ -460,18 +461,29 @@ export default function TutorPulse() {
     return { sessions: lessons.length, rate: s.hourlyRate, totalHours, total };
   }, [store.students, store.lessons]);
 
+  // ── Clock tick — refreshes every 60s so dashboard stays current ──
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   const todayLessons = useMemo(() => {
-    const today = new Date();
     return store.lessons.filter((l) => {
       const d = new Date(l.date);
-      return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+      const endTime = new Date(d.getTime() + l.duration * 60000);
+      return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+        && endTime > now && l.status !== "completed" && l.status !== "cancelled";
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [store.lessons]);
+  }, [store.lessons, now]);
 
   const upcomingLessons = useMemo(() => {
-    const now = new Date();
-    return store.lessons.filter((l) => new Date(l.date) >= now).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 8);
-  }, [store.lessons]);
+    return store.lessons.filter((l) => {
+      const d = new Date(l.date);
+      const endTime = new Date(d.getTime() + l.duration * 60000);
+      return endTime > now && l.status !== "completed" && l.status !== "cancelled";
+    }).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 8);
+  }, [store.lessons, now]);
 
   const pendingPayments = useMemo(() => store.payments.filter((p) => p.status === "pending" || p.status === "overdue"), [store.payments]);
   const activeStudents = useMemo(() => store.students.filter((s) => s.status === "active"), [store.students]);
@@ -523,10 +535,10 @@ export default function TutorPulse() {
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 13, color: theme.textMuted, fontWeight: 500, marginBottom: 4 }}>
-          {new Date().toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          {now.toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
         <h1 style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Playfair Display', serif", lineHeight: 1.2 }}>
-          Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, Leon
+          Good {now.getHours() < 12 ? "morning" : now.getHours() < 17 ? "afternoon" : "evening"}, Leon
         </h1>
       </div>
 
@@ -534,7 +546,7 @@ export default function TutorPulse() {
       <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4 }}>
         <StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} />
         <StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={`${upcomingLessons.length} upcoming`} color={theme.info} />
-        <StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={`${pendingPayments.length} pending`} color={theme.success} />
+        <StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={`${pendingPayments.length} pending`} color={theme.success} />
       </div>
 
       {/* Today's Schedule */}
@@ -667,7 +679,7 @@ export default function TutorPulse() {
               ))}
               {calendarDays.map((day, i) => {
                 const lessons = getLessonsForDay(day);
-                const isToday = day && day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                const isToday = day && day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
                 return (
                   <div key={i} style={{ padding: "6px 2px", minHeight: 48, borderRadius: 8, background: isToday ? theme.accentBg : "transparent", border: isToday ? `1px solid ${theme.accent}44` : "1px solid transparent" }}>
                     {day && (
@@ -1009,11 +1021,11 @@ export default function TutorPulse() {
   // PAGE: ADMIN CONSOLE
   // ═══════════════════════════════════════════════════════════
   const AdminPage = () => {
-    const currentMonthStr = new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0");
+    const currentMonthStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
     const totalMonthly = store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, currentMonthStr).total, 0);
     const avgFee = activeStudents.length > 0 ? Math.round(totalMonthly / activeStudents.length) : 0;
     const completionRate = store.lessons.length > 0 ? Math.round(store.lessons.filter(l => l.status === "confirmed" || l.status === "completed").length / store.lessons.length * 100) : 0;
-    const lastMonthStr = new Date().getMonth() === 0 ? (new Date().getFullYear() - 1) + "-12" : new Date().getFullYear() + "-" + String(new Date().getMonth()).padStart(2, "0");
+    const lastMonthStr = now.getMonth() === 0 ? (now.getFullYear() - 1) + "-12" : now.getFullYear() + "-" + String(now.getMonth()).padStart(2, "0");
     const collectionRate = store.payments.filter(p => p.month === lastMonthStr).length > 0 ? Math.round(store.payments.filter(p => p.month === lastMonthStr && p.status === "paid").length / store.payments.filter(p => p.month === lastMonthStr).length * 100) : 0;
 
     const revenueData = (() => {
@@ -1043,7 +1055,7 @@ export default function TutorPulse() {
         {adminTab === "overview" && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-              <StatCard icon="dollar" label={new Date().toLocaleDateString("en-SG", { month: "short" }) + " Rev"} value={`$${totalMonthly.toLocaleString()}`} color={theme.success} />
+              <StatCard icon="dollar" label={now.toLocaleDateString("en-SG", { month: "short" }) + " Rev"} value={`$${totalMonthly.toLocaleString()}`} color={theme.success} />
               <StatCard icon="users" label="Avg / Student" value={`$${avgFee}`} color={theme.info} />
               <StatCard icon="check" label="Completion" value={`${completionRate}%`} color={theme.accent} />
               <StatCard icon="dollar" label="Collection" value={`${collectionRate}%`} sub="Last month" color={theme.purple} />
@@ -1127,52 +1139,61 @@ export default function TutorPulse() {
 
             {/* Export / Import */}
             <Card style={{ marginTop: 16, padding: 14 }}>
-              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>EXPORT DATA</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>EXPORT</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
-                  // Export full detail CSV — one row per lesson with student info
-                  const headers = "Student,Level,Stream,Status,Hourly Rate,Parent,Phone,Email,Lesson Date,Lesson Time,Duration (min),Subject,Lesson Status,Location,Feedback";
-                  const rows = [];
-                  store.lessons.sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(l => {
-                    const s = store.students.find(st => st.id === l.studentId);
-                    if (!s) return;
-                    const d = new Date(l.date);
-                    rows.push([
-                      '"' + s.name + '"', s.level, s.stream, s.status, s.hourlyRate,
-                      '"' + s.parent + '"', s.parentPhone, s.parentEmail,
-                      d.toLocaleDateString("en-SG"), d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }),
-                      l.duration, '"' + l.subject.replace(/"/g, '""') + '"', l.status, l.location,
-                      '"' + (l.comment || "").replace(/"/g, '""') + '"'
-                    ].join(","));
-                  });
-                  // Also add students with no lessons
-                  store.students.forEach(s => {
-                    const hasLessons = store.lessons.some(l => l.studentId === s.id);
-                    if (!hasLessons) {
-                      rows.push(['"' + s.name + '"', s.level, s.stream, s.status, s.hourlyRate, '"' + s.parent + '"', s.parentPhone, s.parentEmail, "", "", "", "", "", "", ""].join(","));
-                    }
-                  });
-                  const csv = headers + "\n" + rows.join("\n");
-                  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-export-" + new Date().toISOString().split("T")[0] + ".csv"; a.click(); URL.revokeObjectURL(url);
-                  addToast("Full export downloaded");
-                }}>Export All (CSV)</Button>
+                  try {
+                    const wb = XLSX.utils.book_new();
+                    // Summary tab — all students overview
+                    const summaryData = store.students.map(s => {
+                      const lessons = store.lessons.filter(l => l.studentId === s.id);
+                      const completed = lessons.filter(l => l.status === "completed").length;
+                      const totalHours = lessons.filter(l => l.status !== "cancelled").reduce((sum, l) => sum + l.duration, 0) / 60;
+                      return { Name: s.name, Level: s.level, Stream: s.stream, Status: s.status, "Hourly Rate": s.hourlyRate, Parent: s.parent, Phone: s.parentPhone, Email: s.parentEmail, "Total Lessons": lessons.length, Completed: completed, "Total Hours": Math.round(totalHours * 100) / 100, "Total Fees": Math.round(s.hourlyRate * totalHours * 100) / 100, "Join Date": s.joinDate, Notes: s.notes || "" };
+                    });
+                    const summaryWs = XLSX.utils.json_to_sheet(summaryData);
+                    summaryWs["!cols"] = [{ wch: 20 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 30 }];
+                    XLSX.utils.book_append_sheet(wb, summaryWs, "All Students");
+                    // One tab per student with their lessons
+                    store.students.forEach(s => {
+                      const lessons = store.lessons.filter(l => l.studentId === s.id).sort((a, b) => new Date(a.date) - new Date(b.date));
+                      const lessonData = lessons.map(l => {
+                        const d = new Date(l.date);
+                        return { Date: d.toLocaleDateString("en-SG"), Time: d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }), Duration: l.duration + " min", Subject: l.subject, Status: l.status, Location: l.location, "Fee ($)": Math.round(s.hourlyRate * l.duration / 60 * 100) / 100, Feedback: l.comment || "" };
+                      });
+                      if (lessonData.length === 0) lessonData.push({ Date: "", Time: "", Duration: "", Subject: "No lessons", Status: "", Location: "", "Fee ($)": "", Feedback: "" });
+                      const ws = XLSX.utils.json_to_sheet(lessonData);
+                      ws["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 40 }];
+                      // Sanitize sheet name (max 31 chars, no special chars)
+                      const sheetName = s.name.replace(/[\\/*?[\]:]/g, "").substring(0, 31);
+                      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                    });
+                    XLSX.writeFile(wb, "TutorPulse-Export-" + new Date().toISOString().split("T")[0] + ".xlsx");
+                    addToast("Excel exported (" + store.students.length + " students)");
+                  } catch (err) {
+                    addToast("Export failed: " + err.message, "error");
+                  }
+                }}>Export Excel</Button>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
                   const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-backup-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
+                  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-backup-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
                   addToast("Backup downloaded");
-                }}>Full Backup (JSON)</Button>
+                }}>Full Backup</Button>
               </div>
-              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 4 }}>CSV includes all students and lessons in one file. Opens in Excel/Google Sheets. JSON backup is for restoring data.</div>
+              <div style={{ fontSize: 11, color: theme.textMuted }}>Excel file has a summary tab + one tab per student with all their lessons and fees. Full Backup is for restoring data.</div>
             </Card>
 
             <Card style={{ padding: 14 }}>
-              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>IMPORT DATA</div>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>IMPORT</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  const headers = "Name,Level,Stream,Status,Hourly Rate,Parent,Phone,Email,Join Date,Notes";
+                  const example = '"John Tan",P5,小学普华,active,70,"Mrs. Tan",+65 91234567,tan@email.com,2025-01-15,"Needs help with 作文"';
+                  const blob = new Blob(["\uFEFF" + headers + "\n" + example + "\n"], { type: "text/csv;charset=utf-8" });
+                  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-student-template.csv"; a.click(); URL.revokeObjectURL(url);
+                  addToast("Template downloaded");
+                }}>Download Template</Button>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
-                  // Import Students CSV
                   const input = document.createElement("input"); input.type = "file"; input.accept = ".csv";
                   input.onchange = (e) => {
                     const file = e.target.files[0]; if (!file) return;
@@ -1180,26 +1201,21 @@ export default function TutorPulse() {
                     reader.onload = (ev) => {
                       try {
                         const lines = ev.target.result.split("\n").filter(l => l.trim());
-                        if (lines.length < 2) { addToast("CSV file is empty", "error"); return; }
+                        if (lines.length < 2) { addToast("CSV is empty", "error"); return; }
                         const newStudents = [];
                         for (let i = 1; i < lines.length; i++) {
                           const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
                           const clean = (s) => (s || "").replace(/^"|"$/g, "").replace(/""/g, '"').trim();
                           if (cols.length >= 4) {
                             const name = clean(cols[0]);
-                            newStudents.push({
-                              id: "s" + genId(), name: name, level: clean(cols[1]) || "P5", stream: clean(cols[2]) || "小学普华",
-                              status: clean(cols[3]) || "active", hourlyRate: parseFloat(clean(cols[4])) || 70,
-                              parent: clean(cols[5]) || "", parentPhone: clean(cols[6]) || "", parentEmail: clean(cols[7]) || "",
-                              joinDate: clean(cols[8]) || new Date().toISOString().split("T")[0], notes: clean(cols[9]) || "",
-                              avatar: name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2),
-                            });
+                            if (!name) continue;
+                            newStudents.push({ id: "s" + genId(), name, level: clean(cols[1]) || "P5", stream: clean(cols[2]) || "小学普华", status: clean(cols[3]) || "active", hourlyRate: parseFloat(clean(cols[4])) || 70, parent: clean(cols[5]) || "", parentPhone: clean(cols[6]) || "", parentEmail: clean(cols[7]) || "", joinDate: clean(cols[8]) || new Date().toISOString().split("T")[0], notes: clean(cols[9]) || "", avatar: name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) });
                           }
                         }
-                        if (newStudents.length > 0 && window.confirm("Import " + newStudents.length + " students? This will ADD to your existing students.")) {
+                        if (newStudents.length > 0 && window.confirm("Import " + newStudents.length + " students? This adds to your existing list.")) {
                           setStore((s) => ({ ...s, students: [...s.students, ...newStudents] }));
                           addToast(newStudents.length + " students imported");
-                        }
+                        } else if (newStudents.length === 0) { addToast("No valid rows found", "error"); }
                       } catch (err) { addToast("Failed to read CSV", "error"); }
                     };
                     reader.readAsText(file);
@@ -1207,7 +1223,6 @@ export default function TutorPulse() {
                   input.click();
                 }}>Import Students CSV</Button>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
-                  // Import full backup JSON
                   const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
                   input.onchange = (e) => {
                     const file = e.target.files[0]; if (!file) return;
@@ -1216,28 +1231,24 @@ export default function TutorPulse() {
                       try {
                         const data = JSON.parse(ev.target.result);
                         if (data.students && data.lessons) {
-                          if (window.confirm("Replace ALL current data with this backup? This cannot be undone.")) {
-                            setStore(data); saveStore(data); addToast("Backup restored");
-                          }
+                          if (window.confirm("Replace ALL data with this backup?")) { setStore(data); saveStore(data); addToast("Backup restored"); }
                         } else { addToast("Invalid backup file", "error"); }
                       } catch (err) { addToast("Failed to read file", "error"); }
                     };
                     reader.readAsText(file);
                   };
                   input.click();
-                }}>Restore Full Backup (JSON)</Button>
+                }}>Restore Backup</Button>
               </div>
               <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: theme.textSecondary, marginBottom: 6 }}>CSV Import Instructions</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: theme.textSecondary, marginBottom: 6 }}>How to import students</div>
                 <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.6 }}>
-                  1. Open Excel or Google Sheets{"\n"}
-                  2. Create columns in this exact order:{"\n"}
-                  <span style={{ color: theme.accent, fontWeight: 500 }}>Name, Level, Stream, Status, Hourly Rate, Parent, Phone, Email, Join Date, Notes</span>{"\n"}
-                  3. Level values: P1–P6, Sec 1–5, JC 1{"\n"}
-                  4. Stream values: 小学普华, 小学高华, G1华文, G2华文, G3华文, 中学高华, H1华文{"\n"}
-                  5. Status: active, trial, or paused{"\n"}
-                  6. Save as CSV, then import here{"\n"}
-                  7. Imported students are ADDED to existing data (not replaced)
+                  1. Download the template above{"\n"}
+                  2. Open in Excel or Google Sheets{"\n"}
+                  3. Fill in your students (one per row){"\n"}
+                  4. Keep the header row as-is{"\n"}
+                  5. Save as CSV, then tap "Import Students CSV"{"\n"}
+                  6. Students are added to your existing list
                 </div>
               </div>
             </Card>
