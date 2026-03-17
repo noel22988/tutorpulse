@@ -1630,7 +1630,7 @@ export default function TutorPulse() {
             <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>LESSONS ({studentLessons.length})</div>
             {studentLessons.length > 0 && (
               <button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); setBulkDeleteIds([]); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>
-                {bulkDeleteMode ? "Done" : "Select"}
+                {bulkDeleteMode ? "Done" : "Bulk Delete"}
               </button>
             )}
           </div>
@@ -2134,7 +2134,7 @@ export default function TutorPulse() {
   const AIAssistantModal = () => {
     const [prompt, setPrompt] = useState("");
     const suggestions = [
-      "Draft a progress report for [student name]",
+      "Draft a progress report for [student's name]",
       "What's my projected revenue for March?",
       "Suggest a lesson plan for P6 高级华文 阅读理解",
       "Write a mid-term assessment summary for all students",
