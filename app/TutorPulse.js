@@ -1187,41 +1187,85 @@ export default function TutorPulse() {
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>IMPORT</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
-                  const headers = "Name,Level,Stream,Status,Hourly Rate,Parent,Phone,Email,Join Date,Notes";
-                  const example = '"John Tan",P5,小学普华,active,70,"Mrs. Tan",+65 91234567,tan@email.com,2025-01-15,"Needs help with 作文"';
-                  const blob = new Blob(["\uFEFF" + headers + "\n" + example + "\n"], { type: "text/csv;charset=utf-8" });
-                  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-student-template.csv"; a.click(); URL.revokeObjectURL(url);
-                  addToast("Template downloaded");
+                  try {
+                    const wb = XLSX.utils.book_new();
+                    // Template with example row
+                    const data = [
+                      { Name: "John Tan", Level: "P5", Stream: "小学普华", Status: "active", "Hourly Rate": 70, Parent: "Mrs. Tan", Phone: "+65 91234567", Email: "tan@email.com", "Join Date": "2025-01-15", Notes: "Example — delete this row" },
+                    ];
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    ws["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 12 }, { wch: 30 }];
+                    // Add data validation dropdowns
+                    const levelList = '"P1,P2,P3,P4,P5,P6,Sec 1,Sec 2,Sec 3,Sec 4,Sec 5,JC 1"';
+                    const streamList = '"小学普华,小学高华,G1华文,G2华文,G3华文,中学高华,H1华文"';
+                    const statusList = '"active,trial,paused"';
+                    // Apply validation to rows 2-100 (B=Level, C=Stream, D=Status)
+                    if (!ws["!dataValidation"]) ws["!dataValidation"] = [];
+                    for (let r = 1; r <= 100; r++) {
+                      ws["!dataValidation"].push({ sqref: "B" + (r + 1), type: "list", formula1: levelList });
+                      ws["!dataValidation"].push({ sqref: "C" + (r + 1), type: "list", formula1: streamList });
+                      ws["!dataValidation"].push({ sqref: "D" + (r + 1), type: "list", formula1: statusList });
+                    }
+                    // Also add a reference sheet with all valid values
+                    const refData = [];
+                    const levels = ["P1","P2","P3","P4","P5","P6","Sec 1","Sec 2","Sec 3","Sec 4","Sec 5","JC 1"];
+                    const streams = ["小学普华","小学高华","G1华文","G2华文","G3华文","中学高华","H1华文"];
+                    const statuses = ["active","trial","paused"];
+                    const maxLen = Math.max(levels.length, streams.length, statuses.length);
+                    for (let i = 0; i < maxLen; i++) {
+                      refData.push({ "Valid Levels": levels[i] || "", "Valid Streams": streams[i] || "", "Valid Statuses": statuses[i] || "" });
+                    }
+                    const refWs = XLSX.utils.json_to_sheet(refData);
+                    refWs["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 14 }];
+                    XLSX.utils.book_append_sheet(wb, ws, "Students");
+                    XLSX.utils.book_append_sheet(wb, refWs, "Valid Values");
+                    XLSX.writeFile(wb, "tutorpulse-student-template.xlsx");
+                    addToast("Template downloaded");
+                  } catch (err) { addToast("Template download failed", "error"); }
                 }}>Download Template</Button>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
-                  const input = document.createElement("input"); input.type = "file"; input.accept = ".csv";
+                  const input = document.createElement("input"); input.type = "file"; input.accept = ".csv,.xlsx,.xls";
                   input.onchange = (e) => {
                     const file = e.target.files[0]; if (!file) return;
                     const reader = new FileReader();
                     reader.onload = (ev) => {
                       try {
-                        const lines = ev.target.result.split("\n").filter(l => l.trim());
-                        if (lines.length < 2) { addToast("CSV is empty", "error"); return; }
-                        const newStudents = [];
-                        for (let i = 1; i < lines.length; i++) {
-                          const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
-                          const clean = (s) => (s || "").replace(/^"|"$/g, "").replace(/""/g, '"').trim();
-                          if (cols.length >= 4) {
-                            const name = clean(cols[0]);
-                            if (!name) continue;
-                            newStudents.push({ id: "s" + genId(), name, level: clean(cols[1]) || "P5", stream: clean(cols[2]) || "小学普华", status: clean(cols[3]) || "active", hourlyRate: parseFloat(clean(cols[4])) || 70, parent: clean(cols[5]) || "", parentPhone: clean(cols[6]) || "", parentEmail: clean(cols[7]) || "", joinDate: clean(cols[8]) || new Date().toISOString().split("T")[0], notes: clean(cols[9]) || "", avatar: name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) });
+                        let rows = [];
+                        if (file.name.endsWith(".csv")) {
+                          // CSV parse
+                          const lines = ev.target.result.split("\n").filter(l => l.trim());
+                          if (lines.length < 2) { addToast("File is empty", "error"); return; }
+                          for (let i = 1; i < lines.length; i++) {
+                            const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
+                            const clean = (s) => (s || "").replace(/^"|"$/g, "").replace(/""/g, '"').trim();
+                            if (cols.length >= 1 && clean(cols[0])) rows.push(cols.map(clean));
+                          }
+                        } else {
+                          // Excel parse
+                          const data = new Uint8Array(ev.target.result);
+                          const wb = XLSX.read(data, { type: "array" });
+                          const ws = wb.Sheets[wb.SheetNames[0]];
+                          const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                          for (let i = 1; i < jsonData.length; i++) {
+                            const r = jsonData[i];
+                            if (r && r.length >= 1 && String(r[0] || "").trim()) rows.push(r.map(c => String(c || "").trim()));
                           }
                         }
+                        const newStudents = rows.map(cols => {
+                          const name = cols[0] || "";
+                          if (!name) return null;
+                          return { id: "s" + genId(), name, level: cols[1] || "P5", stream: cols[2] || "小学普华", status: cols[3] || "active", hourlyRate: parseFloat(cols[4]) || 70, parent: cols[5] || "", parentPhone: cols[6] || "", parentEmail: cols[7] || "", joinDate: cols[8] || new Date().toISOString().split("T")[0], notes: cols[9] || "", avatar: name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+                        }).filter(Boolean);
                         if (newStudents.length > 0 && window.confirm("Import " + newStudents.length + " students? This adds to your existing list.")) {
                           setStore((s) => ({ ...s, students: [...s.students, ...newStudents] }));
                           addToast(newStudents.length + " students imported");
                         } else if (newStudents.length === 0) { addToast("No valid rows found", "error"); }
-                      } catch (err) { addToast("Failed to read CSV", "error"); }
+                      } catch (err) { addToast("Failed to read file: " + err.message, "error"); }
                     };
-                    reader.readAsText(file);
+                    if (file.name.endsWith(".csv")) { reader.readAsText(file); } else { reader.readAsArrayBuffer(file); }
                   };
                   input.click();
-                }}>Import Students CSV</Button>
+                }}>Import Students</Button>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
                   const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
                   input.onchange = (e) => {
@@ -1243,12 +1287,13 @@ export default function TutorPulse() {
               <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: theme.textSecondary, marginBottom: 6 }}>How to import students</div>
                 <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.6 }}>
-                  1. Download the template above{"\n"}
+                  1. Download the template above (.xlsx){"\n"}
                   2. Open in Excel or Google Sheets{"\n"}
-                  3. Fill in your students (one per row){"\n"}
-                  4. Keep the header row as-is{"\n"}
-                  5. Save as CSV, then tap "Import Students CSV"{"\n"}
-                  6. Students are added to your existing list
+                  3. Level, Stream and Status columns have dropdown menus{"\n"}
+                  4. See "Valid Values" tab for all options{"\n"}
+                  5. Delete the example row, fill in your students{"\n"}
+                  6. Save and tap "Import Students"{"\n"}
+                  7. Accepts both .xlsx and .csv files
                 </div>
               </div>
             </Card>
