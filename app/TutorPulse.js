@@ -1129,38 +1129,42 @@ export default function TutorPulse() {
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>EXPORT DATA</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
-                  // Export Students CSV
-                  const headers = "Name,Level,Stream,Status,Hourly Rate,Parent,Phone,Email,Join Date,Notes";
-                  const rows = store.students.map(s => [s.name, s.level, s.stream, s.status, s.hourlyRate, s.parent, s.parentPhone, s.parentEmail, s.joinDate, '"' + (s.notes || "").replace(/"/g, '""') + '"'].join(","));
-                  const csv = headers + "\n" + rows.join("\n");
-                  const blob = new Blob([csv], { type: "text/csv" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-students-" + new Date().toISOString().split("T")[0] + ".csv"; a.click(); URL.revokeObjectURL(url);
-                  addToast("Students CSV downloaded");
-                }}>Students CSV</Button>
-                <Button size="sm" variant="secondary" icon="download" onClick={() => {
-                  // Export Lessons CSV
-                  const headers = "Student,Date,Time,Duration (min),Subject,Status,Location,Feedback";
-                  const rows = store.lessons.map(l => {
+                  // Export full detail CSV — one row per lesson with student info
+                  const headers = "Student,Level,Stream,Status,Hourly Rate,Parent,Phone,Email,Lesson Date,Lesson Time,Duration (min),Subject,Lesson Status,Location,Feedback";
+                  const rows = [];
+                  store.lessons.sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(l => {
                     const s = store.students.find(st => st.id === l.studentId);
+                    if (!s) return;
                     const d = new Date(l.date);
-                    return [s ? s.name : "Unknown", d.toLocaleDateString("en-SG"), d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }), l.duration, '"' + l.subject.replace(/"/g, '""') + '"', l.status, l.location, '"' + (l.comment || "").replace(/"/g, '""') + '"'].join(",");
+                    rows.push([
+                      '"' + s.name + '"', s.level, s.stream, s.status, s.hourlyRate,
+                      '"' + s.parent + '"', s.parentPhone, s.parentEmail,
+                      d.toLocaleDateString("en-SG"), d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }),
+                      l.duration, '"' + l.subject.replace(/"/g, '""') + '"', l.status, l.location,
+                      '"' + (l.comment || "").replace(/"/g, '""') + '"'
+                    ].join(","));
+                  });
+                  // Also add students with no lessons
+                  store.students.forEach(s => {
+                    const hasLessons = store.lessons.some(l => l.studentId === s.id);
+                    if (!hasLessons) {
+                      rows.push(['"' + s.name + '"', s.level, s.stream, s.status, s.hourlyRate, '"' + s.parent + '"', s.parentPhone, s.parentEmail, "", "", "", "", "", "", ""].join(","));
+                    }
                   });
                   const csv = headers + "\n" + rows.join("\n");
-                  const blob = new Blob([csv], { type: "text/csv" });
+                  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
                   const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-lessons-" + new Date().toISOString().split("T")[0] + ".csv"; a.click(); URL.revokeObjectURL(url);
-                  addToast("Lessons CSV downloaded");
-                }}>Lessons CSV</Button>
+                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-export-" + new Date().toISOString().split("T")[0] + ".csv"; a.click(); URL.revokeObjectURL(url);
+                  addToast("Full export downloaded");
+                }}>Export All (CSV)</Button>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
-                  // Export full backup JSON
                   const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
                   const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-full-backup-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
-                  addToast("Full backup downloaded");
+                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-backup-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
+                  addToast("Backup downloaded");
                 }}>Full Backup (JSON)</Button>
               </div>
-              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 4 }}>CSV files can be opened in Excel or Google Sheets. Full Backup (JSON) is used for restoring data.</div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 4 }}>CSV includes all students and lessons in one file. Opens in Excel/Google Sheets. JSON backup is for restoring data.</div>
             </Card>
 
             <Card style={{ padding: 14 }}>
@@ -1313,6 +1317,9 @@ export default function TutorPulse() {
   const [editingLesson, setEditingLesson] = useState(false);
   const [lessonEdit, setLessonEdit] = useState({});
   const [deletedLesson, setDeletedLesson] = useState(null);
+  const [returnToStudentId, setReturnToStudentId] = useState(null);
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [bulkDeleteIds, setBulkDeleteIds] = useState([]);
 
   const startLessonEdit = () => {
     if (!selectedLesson) return;
@@ -1341,11 +1348,16 @@ export default function TutorPulse() {
   const handleDeleteLesson = () => {
     if (!selectedLesson) return;
     const toDelete = { ...selectedLesson };
-    // Remove from store
+    const returnTo = returnToStudentId;
     setStore((s) => ({ ...s, lessons: s.lessons.filter((l) => l.id !== toDelete.id) }));
     setSelectedLesson(null);
     setDeletedLesson(toDelete);
-    // Show undo toast for 5 seconds
+    // Return to student profile if we came from there
+    if (returnTo) {
+      const student = store.students.find(s => s.id === returnTo);
+      if (student) setSelectedStudent(student);
+      setReturnToStudentId(null);
+    }
     const undoId = genId();
     setToasts((t) => [...t, { id: undoId, msg: "Lesson deleted", type: "undo", undoData: toDelete }]);
     setTimeout(() => { setToasts((t) => t.filter((x) => x.id !== undoId)); setDeletedLesson(null); }, 5000);
@@ -1614,10 +1626,43 @@ export default function TutorPulse() {
 
         {/* Lessons section (always shown) */}
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>LESSONS</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>LESSONS ({studentLessons.length})</div>
+            {studentLessons.length > 0 && (
+              <button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); setBulkDeleteIds([]); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>
+                {bulkDeleteMode ? "Done" : "Select"}
+              </button>
+            )}
+          </div>
+          {bulkDeleteMode && bulkDeleteIds.length > 0 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, padding: "8px 12px", background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "44" }}>
+              <span style={{ fontSize: 12, color: theme.danger, fontWeight: 600, flex: 1 }}>{bulkDeleteIds.length} selected</span>
+              <button onClick={() => setBulkDeleteIds(studentLessons.map(l => l.id))} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>Select All</button>
+              <button onClick={() => {
+                if (window.confirm("Delete " + bulkDeleteIds.length + " lessons?")) {
+                  setStore((s) => ({ ...s, lessons: s.lessons.filter(l => !bulkDeleteIds.includes(l.id)) }));
+                  addToast(bulkDeleteIds.length + " lessons deleted");
+                  setBulkDeleteIds([]);
+                  setBulkDeleteMode(false);
+                }
+              }} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: theme.danger, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Delete</button>
+            </div>
+          )}
           {studentLessons.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, padding: "8px 0" }}>No lessons yet</div>}
           {studentLessons.map((l) => (
-            <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border, cursor: "pointer" }} onClick={() => { setSelectedStudent(null); setSelectedLesson(l); setLessonComment(l.comment || ""); }}>
+            <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border, cursor: "pointer", display: "flex", gap: 10, alignItems: "flex-start" }} onClick={() => {
+              if (bulkDeleteMode) {
+                setBulkDeleteIds((ids) => ids.includes(l.id) ? ids.filter(x => x !== l.id) : [...ids, l.id]);
+              } else {
+                setReturnToStudentId(selectedStudent.id); setSelectedStudent(null); setSelectedLesson(l); setLessonComment(l.comment || "");
+              }
+            }}>
+              {bulkDeleteMode && (
+                <div style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (bulkDeleteIds.includes(l.id) ? theme.danger : theme.borderLight), background: bulkDeleteIds.includes(l.id) ? theme.danger : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}>
+                  {bulkDeleteIds.includes(l.id) && <Icon name="check" size={12} color="white" />}
+                </div>
+              )}
+              <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}</div>
@@ -1641,6 +1686,7 @@ export default function TutorPulse() {
                   </button>
                 </div>
               )}
+              </div>
             </div>
           ))}
         </div>
@@ -2088,7 +2134,7 @@ export default function TutorPulse() {
   const AIAssistantModal = () => {
     const [prompt, setPrompt] = useState("");
     const suggestions = [
-      "Draft a progress report for",
+      "Draft a progress report for [student name]",
       "What's my projected revenue for March?",
       "Suggest a lesson plan for P6 高级华文 阅读理解",
       "Write a mid-term assessment summary for all students",
@@ -2238,7 +2284,11 @@ export default function TutorPulse() {
 
       {/* Lesson Detail Modal — rendered inline to prevent textarea remount */}
       {selectedLesson && (
-        <Modal open={!!selectedLesson} onClose={() => { setSelectedLesson(null); setEditingLesson(false); }} title={editingLesson ? "Edit Lesson" : "Lesson Details"}>
+        <Modal open={!!selectedLesson} onClose={() => { 
+          const returnTo = returnToStudentId;
+          setSelectedLesson(null); setEditingLesson(false);
+          if (returnTo) { const student = store.students.find(s => s.id === returnTo); if (student) setSelectedStudent(student); setReturnToStudentId(null); }
+        }} title={editingLesson ? "Edit Lesson" : "Lesson Details"}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
             <Avatar initials={lessonDetailStudent ? lessonDetailStudent.avatar : "?"} size={48} />
             <div>
