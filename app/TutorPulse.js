@@ -378,6 +378,8 @@ export default function TutorPulse() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [showNewLesson, setShowNewLesson] = useState(false);
+  const [prefillStudentId, setPrefillStudentId] = useState(null);
+  const [newLessonForStudent, setNewLessonForStudent] = useState(null);
   const [showNewStudent, setShowNewStudent] = useState(false);
   const [showMessageCompose, setShowMessageCompose] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -441,6 +443,16 @@ export default function TutorPulse() {
 
   const updateStudent = useCallback((id, updates) => {
     setStore((s) => ({ ...s, students: s.students.map((st) => st.id === id ? { ...st, ...updates } : st) }));
+  }, []);
+
+  const deleteStudent = useCallback((id) => {
+    setStore((s) => ({
+      ...s,
+      students: s.students.filter((st) => st.id !== id),
+      lessons: s.lessons.filter((l) => l.studentId !== id),
+      payments: s.payments.filter((p) => p.studentId !== id),
+      messages: s.messages.filter((m) => m.parentId !== id),
+    }));
   }, []);
 
   const getStudent = useCallback((id) => store.students.find((s) => s.id === id), [store.students]);
@@ -544,9 +556,9 @@ export default function TutorPulse() {
 
       {/* Stats Row */}
       <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4 }}>
-        <StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} />
-        <StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={`${upcomingLessons.length} upcoming`} color={theme.info} />
-        <StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={`${pendingPayments.length} pending`} color={theme.success} />
+        <div onClick={() => setPage("students")} style={{ flex: 1, minWidth: 150, cursor: "pointer" }}><StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} /></div>
+        <div onClick={() => setPage("schedule")} style={{ flex: 1, minWidth: 150, cursor: "pointer" }}><StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={`${upcomingLessons.length} upcoming`} color={theme.info} /></div>
+        <div onClick={() => setPage("payments")} style={{ flex: 1, minWidth: 150, cursor: "pointer" }}><StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={`${pendingPayments.length} pending`} color={theme.success} /></div>
       </div>
 
       {/* Today's Schedule */}
@@ -740,7 +752,7 @@ export default function TutorPulse() {
   const StudentsPage = () => {
     const [filter, setFilter] = useState("all");
     const filtered = filter === "all" ? store.students : store.students.filter((s) => s.status === filter);
-    const searched = searchQuery ? filtered.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.level.toLowerCase().includes(searchQuery.toLowerCase())) : filtered;
+    const searched = (searchQuery ? filtered.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.level.toLowerCase().includes(searchQuery.toLowerCase())) : filtered).sort((a, b) => a.name.localeCompare(b.name));
 
     return (
       <div className="fade-in">
@@ -874,13 +886,31 @@ export default function TutorPulse() {
         </div>
 
         {/* Month Selector */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto" }}>
-          {availableMonths.map((m) => (
-            <button key={m} onClick={() => setMonthView(m)} style={{ padding: "8px 16px", borderRadius: 10, border: `1px solid ${monthView === m ? theme.accent : theme.border}`, background: monthView === m ? theme.accentBg : "transparent", color: monthView === m ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              {formatMonth(m)}
-            </button>
-          ))}
-        </div>
+        {(() => {
+          const quickMonths = [];
+          for (let i = 0; i < 3; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            quickMonths.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+          }
+          const otherMonths = availableMonths.filter(m => !quickMonths.includes(m));
+          return (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", overflowX: "auto" }}>
+              {quickMonths.map((m) => (
+                <button key={m} onClick={() => setMonthView(m)} style={{ padding: "8px 16px", borderRadius: 10, border: "1px solid " + (monthView === m ? theme.accent : theme.border), background: monthView === m ? theme.accentBg : "transparent", color: monthView === m ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+                  {formatMonth(m)}
+                </button>
+              ))}
+              {otherMonths.length > 0 && (
+                <select value={quickMonths.includes(monthView) ? "" : monthView} onChange={(e) => { if (e.target.value) setMonthView(e.target.value); }} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid " + (!quickMonths.includes(monthView) && monthView ? theme.accent : theme.border), background: !quickMonths.includes(monthView) && monthView ? theme.accentBg : theme.bgInput, color: !quickMonths.includes(monthView) && monthView ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", appearance: "none" }}>
+                  <option value="">More...</option>
+                  {otherMonths.map((m) => (
+                    <option key={m} value={m}>{formatMonth(m)}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Summary Bar */}
         <Card style={{ marginBottom: 16, padding: 16 }}>
@@ -1489,7 +1519,9 @@ export default function TutorPulse() {
 
   // ── New Lesson Modal (with Recurring) ───────────────────────
   const NewLessonModal = () => {
-    const [form, setForm] = useState({ studentId: store.students[0]?.id || "", date: "", time: "10:00", duration: "90", subject: "", location: "Home Studio" });
+    const sortedStudents = [...store.students].sort((a, b) => a.name.localeCompare(b.name));
+    const defaultStudentId = prefillStudentId || sortedStudents[0]?.id || "";
+    const [form, setForm] = useState({ studentId: defaultStudentId, date: "", time: "10:00", duration: "90", subject: "", location: "Home Studio" });
     const [isRecurring, setIsRecurring] = useState(false);
     const [recurDay, setRecurDay] = useState("1");
     const [recurTime, setRecurTime] = useState("10:00");
@@ -1497,6 +1529,10 @@ export default function TutorPulse() {
     const [recurEndDate, setRecurEndDate] = useState("");
     const [previewDates, setPreviewDates] = useState([]);
     const updateForm = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+    // Sync prefillStudentId when it changes
+    useEffect(() => {
+      if (prefillStudentId) setForm((f) => ({ ...f, studentId: prefillStudentId }));
+    }, [prefillStudentId]);
 
     // Generate preview dates between start and end
     useEffect(() => {
@@ -1519,8 +1555,15 @@ export default function TutorPulse() {
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
     return (
-      <Modal open={showNewLesson} onClose={() => setShowNewLesson(false)} title="Schedule Lesson" width={500}>
-        <Select label="Student" value={form.studentId} onChange={(v) => updateForm("studentId", v)} options={store.students.map((s) => ({ value: s.id, label: `${s.name} (${s.level})` }))} />
+      <Modal open={showNewLesson} onClose={() => { setShowNewLesson(false); setPrefillStudentId(null); }} title="Schedule Lesson" width={500}>
+        {prefillStudentId ? (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Student</label>
+            <div style={{ padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, fontSize: 14 }}>{(() => { const s = getStudent(prefillStudentId); return s ? s.name + " (" + s.level + ")" : ""; })()}</div>
+          </div>
+        ) : (
+          <Select label="Student" value={form.studentId} onChange={(v) => updateForm("studentId", v)} options={sortedStudents.map((s) => ({ value: s.id, label: s.name + " (" + s.level + ")" }))} />
+        )}
 
         {/* Toggle: Single vs Recurring */}
         <div style={{ display: "flex", gap: 2, background: theme.bgInput, borderRadius: 12, padding: 3, marginBottom: 16 }}>
@@ -1592,10 +1635,11 @@ export default function TutorPulse() {
               addLesson({ studentId: form.studentId, date: dateTime.toISOString(), duration: parseInt(form.duration), subject: subj, status: "pending", location: form.location, comment: "" });
             }
             setShowNewLesson(false);
+            setPrefillStudentId(null);
           }}>
             {isRecurring ? "Schedule " + previewDates.length + " Lessons" : "Schedule Lesson"}
           </Button>
-          <Button variant="secondary" onClick={() => setShowNewLesson(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => { setShowNewLesson(false); setPrefillStudentId(null); }}>Cancel</Button>
         </div>
       </Modal>
     );
@@ -2387,8 +2431,15 @@ export default function TutorPulse() {
             {!editingStudent && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button size="sm" icon="edit" variant="secondary" onClick={startEdit}>Edit Details</Button>
-                <Button size="sm" icon="calendar" onClick={() => { setSelectedStudent(null); setShowNewLesson(true); }}>Schedule Lesson</Button>
+                <Button size="sm" icon="calendar" onClick={() => { setPrefillStudentId(selectedStudent.id); setSelectedStudent(null); setShowNewLesson(true); }}>Schedule Lesson</Button>
                 <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setShowMessageCompose(selectedStudent.id); }}>Message Parent</Button>
+                <Button size="sm" variant="ghost" icon="trash" onClick={() => {
+                  if (window.confirm("Delete " + selectedStudent.name + " and all their lessons? This cannot be undone.")) {
+                    deleteStudent(selectedStudent.id);
+                    setSelectedStudent(null);
+                    addToast("Student deleted");
+                  }
+                }} style={{ color: theme.danger }}>Delete Student</Button>
               </div>
             )}
           </Modal>
