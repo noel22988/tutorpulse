@@ -647,12 +647,18 @@ export default function TutorPulse() {
 
         {viewMode === "calendar" ? (
           <Card>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <button onClick={() => setCalendarDate(new Date(year, month - 1, 1))} style={{ background: "none", border: "none", color: theme.textSecondary, cursor: "pointer", padding: 8 }}>‹</button>
-              <span style={{ fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>
-                {calendarDate.toLocaleDateString("en-SG", { month: "long", year: "numeric" })}
-              </span>
-              <button onClick={() => setCalendarDate(new Date(year, month + 1, 1))} style={{ background: "none", border: "none", color: theme.textSecondary, cursor: "pointer", padding: 8 }}>›</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
+              <select value={month} onChange={(e) => setCalendarDate(new Date(year, parseInt(e.target.value), 1))} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
+                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                  <option key={i} value={i}>{m}</option>
+                ))}
+              </select>
+              <select value={year} onChange={(e) => setCalendarDate(new Date(parseInt(e.target.value), month, 1))} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
+                {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button onClick={() => setCalendarDate(new Date())} style={{ padding: "6px 10px", background: theme.accentBg, border: "1px solid " + theme.accent + "44", borderRadius: 8, color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Today</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
               {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
@@ -1120,48 +1126,115 @@ export default function TutorPulse() {
 
             {/* Export / Import */}
             <Card style={{ marginTop: 16, padding: 14 }}>
-              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>BACKUP & RESTORE</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>EXPORT DATA</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  // Export Students CSV
+                  const headers = "Name,Level,Stream,Status,Hourly Rate,Parent,Phone,Email,Join Date,Notes";
+                  const rows = store.students.map(s => [s.name, s.level, s.stream, s.status, s.hourlyRate, s.parent, s.parentPhone, s.parentEmail, s.joinDate, '"' + (s.notes || "").replace(/"/g, '""') + '"'].join(","));
+                  const csv = headers + "\n" + rows.join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-students-" + new Date().toISOString().split("T")[0] + ".csv"; a.click(); URL.revokeObjectURL(url);
+                  addToast("Students CSV downloaded");
+                }}>Students CSV</Button>
+                <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  // Export Lessons CSV
+                  const headers = "Student,Date,Time,Duration (min),Subject,Status,Location,Feedback";
+                  const rows = store.lessons.map(l => {
+                    const s = store.students.find(st => st.id === l.studentId);
+                    const d = new Date(l.date);
+                    return [s ? s.name : "Unknown", d.toLocaleDateString("en-SG"), d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }), l.duration, '"' + l.subject.replace(/"/g, '""') + '"', l.status, l.location, '"' + (l.comment || "").replace(/"/g, '""') + '"'].join(",");
+                  });
+                  const csv = headers + "\n" + rows.join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-lessons-" + new Date().toISOString().split("T")[0] + ".csv"; a.click(); URL.revokeObjectURL(url);
+                  addToast("Lessons CSV downloaded");
+                }}>Lessons CSV</Button>
+                <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  // Export full backup JSON
                   const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
                   const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = "tutorpulse-backup-" + new Date().toISOString().split("T")[0] + ".json";
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  addToast("Backup downloaded");
-                }}>Export Backup</Button>
+                  const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-full-backup-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
+                  addToast("Full backup downloaded");
+                }}>Full Backup (JSON)</Button>
+              </div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 4 }}>CSV files can be opened in Excel or Google Sheets. Full Backup (JSON) is used for restoring data.</div>
+            </Card>
+
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>IMPORT DATA</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file";
-                  input.accept = ".json";
+                  // Import Students CSV
+                  const input = document.createElement("input"); input.type = "file"; input.accept = ".csv";
                   input.onchange = (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
+                    const file = e.target.files[0]; if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      try {
+                        const lines = ev.target.result.split("\n").filter(l => l.trim());
+                        if (lines.length < 2) { addToast("CSV file is empty", "error"); return; }
+                        const newStudents = [];
+                        for (let i = 1; i < lines.length; i++) {
+                          const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
+                          const clean = (s) => (s || "").replace(/^"|"$/g, "").replace(/""/g, '"').trim();
+                          if (cols.length >= 4) {
+                            const name = clean(cols[0]);
+                            newStudents.push({
+                              id: "s" + genId(), name: name, level: clean(cols[1]) || "P5", stream: clean(cols[2]) || "小学普华",
+                              status: clean(cols[3]) || "active", hourlyRate: parseFloat(clean(cols[4])) || 70,
+                              parent: clean(cols[5]) || "", parentPhone: clean(cols[6]) || "", parentEmail: clean(cols[7]) || "",
+                              joinDate: clean(cols[8]) || new Date().toISOString().split("T")[0], notes: clean(cols[9]) || "",
+                              avatar: name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2),
+                            });
+                          }
+                        }
+                        if (newStudents.length > 0 && window.confirm("Import " + newStudents.length + " students? This will ADD to your existing students.")) {
+                          setStore((s) => ({ ...s, students: [...s.students, ...newStudents] }));
+                          addToast(newStudents.length + " students imported");
+                        }
+                      } catch (err) { addToast("Failed to read CSV", "error"); }
+                    };
+                    reader.readAsText(file);
+                  };
+                  input.click();
+                }}>Import Students CSV</Button>
+                <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
+                  // Import full backup JSON
+                  const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
+                  input.onchange = (e) => {
+                    const file = e.target.files[0]; if (!file) return;
                     const reader = new FileReader();
                     reader.onload = (ev) => {
                       try {
                         const data = JSON.parse(ev.target.result);
                         if (data.students && data.lessons) {
-                          if (window.confirm("Replace all current data with this backup?")) {
-                            setStore(data);
-                            saveStore(data);
-                            addToast("Backup restored successfully");
+                          if (window.confirm("Replace ALL current data with this backup? This cannot be undone.")) {
+                            setStore(data); saveStore(data); addToast("Backup restored");
                           }
-                        } else {
-                          addToast("Invalid backup file", "error");
-                        }
-                      } catch (err) {
-                        addToast("Failed to read file", "error");
-                      }
+                        } else { addToast("Invalid backup file", "error"); }
+                      } catch (err) { addToast("Failed to read file", "error"); }
                     };
                     reader.readAsText(file);
                   };
                   input.click();
-                }}>Import Backup</Button>
+                }}>Restore Full Backup (JSON)</Button>
               </div>
-              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Export your data regularly as a backup. Import restores everything from a backup file.</div>
+              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: theme.textSecondary, marginBottom: 6 }}>CSV Import Instructions</div>
+                <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.6 }}>
+                  1. Open Excel or Google Sheets{"\n"}
+                  2. Create columns in this exact order:{"\n"}
+                  <span style={{ color: theme.accent, fontWeight: 500 }}>Name, Level, Stream, Status, Hourly Rate, Parent, Phone, Email, Join Date, Notes</span>{"\n"}
+                  3. Level values: P1–P6, Sec 1–5, JC 1{"\n"}
+                  4. Stream values: 小学普华, 小学高华, G1华文, G2华文, G3华文, 中学高华, H1华文{"\n"}
+                  5. Status: active, trial, or paused{"\n"}
+                  6. Save as CSV, then import here{"\n"}
+                  7. Imported students are ADDED to existing data (not replaced)
+                </div>
+              </div>
             </Card>
 
             {/* Revenue History Editor */}
@@ -1235,136 +1308,56 @@ export default function TutorPulse() {
   // MODALS
   // ═══════════════════════════════════════════════════════════
 
-  // ── Lesson Detail Modal (Editable) ────────────────────────────
-  const LessonDetailModal = () => {
-    if (!selectedLesson) return null;
-    const student = getStudent(selectedLesson.studentId);
-    const [editingLesson, setEditingLesson] = useState(false);
-    const [lessonEdit, setLessonEdit] = useState({});
+  // ── Lesson Detail (inline — not a sub-component, to prevent textarea remount) ──
+  const lessonDetailStudent = selectedLesson ? getStudent(selectedLesson.studentId) : null;
+  const [editingLesson, setEditingLesson] = useState(false);
+  const [lessonEdit, setLessonEdit] = useState({});
+  const [deletedLesson, setDeletedLesson] = useState(null);
 
-    const startLessonEdit = () => {
-      const d = new Date(selectedLesson.date);
-      setLessonEdit({
-        date: d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"),
-        time: String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"),
-        duration: String(selectedLesson.duration),
-        subject: selectedLesson.subject,
-        location: selectedLesson.location,
-      });
-      setEditingLesson(true);
-    };
-
-    const saveLessonEdit = () => {
-      const dateTime = new Date(lessonEdit.date + "T" + lessonEdit.time + ":00");
-      const updates = {
-        date: dateTime.toISOString(),
-        duration: parseInt(lessonEdit.duration),
-        subject: lessonEdit.subject,
-        location: lessonEdit.location,
-      };
-      updateLesson(selectedLesson.id, updates);
-      setSelectedLesson({ ...selectedLesson, ...updates });
-      setEditingLesson(false);
-      addToast("Lesson updated");
-    };
-
-    const le = (k, v) => setLessonEdit((f) => ({ ...f, [k]: v }));
-
-    return (
-      <Modal open={!!selectedLesson} onClose={() => { setSelectedLesson(null); setEditingLesson(false); }} title={editingLesson ? "Edit Lesson" : "Lesson Details"}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <Avatar initials={student ? student.avatar : "?"} size={48} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>{student ? student.name : "Unknown"}</div>
-            <div style={{ color: theme.textSecondary, fontSize: 13 }}>{student ? student.level + " · " + student.stream : ""}</div>
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-            <Badge text={selectedLesson.status} color={getStatusColor(selectedLesson.status)} bg={getStatusBg(selectedLesson.status)} />
-            {!editingLesson && selectedLesson.status !== "completed" && selectedLesson.status !== "cancelled" && (
-              <button onClick={startLessonEdit} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-                <Icon name="edit" size={16} color={theme.accent} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {!editingLesson ? (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>DATE</div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{formatDate(selectedLesson.date)}</div>
-              </div>
-              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>TIME</div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{formatTime(selectedLesson.date)}</div>
-              </div>
-              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>DURATION</div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.duration} min</div>
-              </div>
-              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>LOCATION</div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.location}</div>
-              </div>
-            </div>
-            <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>SUBJECT</div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.subject}</div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Input label="Date" type="date" value={lessonEdit.date} onChange={(v) => le("date", v)} />
-              <Input label="Time" type="time" value={lessonEdit.time} onChange={(v) => le("time", v)} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Select label="Duration" value={lessonEdit.duration} onChange={(v) => le("duration", v)} options={[{ value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }, { value: "150", label: "150 min" }, { value: "180", label: "180 min" }]} />
-              <Select label="Location" value={lessonEdit.location} onChange={(v) => le("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
-            </div>
-            <Input label="Subject / Topic" value={lessonEdit.subject} onChange={(v) => le("subject", v)} />
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <Button size="sm" icon="check" onClick={saveLessonEdit}>Save Changes</Button>
-              <Button size="sm" variant="secondary" onClick={() => setEditingLesson(false)}>Cancel</Button>
-            </div>
-          </>
-        )}
-
-        {/* Session Feedback */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Session Feedback / Notes</label>
-          <textarea value={lessonComment} onChange={(e) => setLessonComment(e.target.value)} placeholder="Add feedback for this session (shown to parents in Fee Invoice)..." rows={3} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical" }} />
-          <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>
-            <Icon name="eye" size={11} color={theme.textMuted} /> Feedback appears in Fee Invoice messages to parents
-          </div>
-          {lessonComment !== (selectedLesson.comment || "") && (
-            <Button size="sm" style={{ marginTop: 8 }} onClick={() => { updateLesson(selectedLesson.id, { comment: lessonComment }); setSelectedLesson({ ...selectedLesson, comment: lessonComment }); addToast("Feedback saved"); }}>Save Feedback</Button>
-          )}
-        </div>
-
-        {/* Actions */}
-        {!editingLesson && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {(selectedLesson.status === "confirmed" || selectedLesson.status === "pending") && (
-              <Button size="sm" variant="success" icon="check" onClick={() => { updateLesson(selectedLesson.id, { status: "completed" }); setSelectedLesson({ ...selectedLesson, status: "completed" }); addToast("Lesson marked as completed"); }}>Completed</Button>
-            )}
-            {selectedLesson.status === "pending" && (
-              <Button size="sm" icon="check" onClick={() => { updateLesson(selectedLesson.id, { status: "confirmed" }); setSelectedLesson({ ...selectedLesson, status: "confirmed" }); addToast("Lesson confirmed"); }} style={{ background: theme.infoBg, color: theme.info, border: "none", borderRadius: 10, cursor: "pointer" }}>Confirm</Button>
-            )}
-            {selectedLesson.status !== "cancelled" && selectedLesson.status !== "completed" && (
-              <Button size="sm" variant="danger" icon="x" onClick={() => { updateLesson(selectedLesson.id, { status: "cancelled" }); setSelectedLesson({ ...selectedLesson, status: "cancelled" }); addToast("Lesson cancelled"); }}>Cancel</Button>
-            )}
-            {selectedLesson.status !== "completed" && selectedLesson.status !== "cancelled" && (
-              <Button size="sm" variant="secondary" icon="edit" onClick={startLessonEdit}>Edit Lesson</Button>
-            )}
-            <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); if (student) setShowMessageCompose(selectedLesson.studentId); }}>Message Parent</Button>
-            <Button size="sm" variant="ghost" icon="trash" onClick={() => { if (window.confirm("Delete this lesson?")) { deleteLesson(selectedLesson.id); setSelectedLesson(null); } }} style={{ color: theme.danger }}>Delete</Button>
-          </div>
-        )}
-      </Modal>
-    );
+  const startLessonEdit = () => {
+    if (!selectedLesson) return;
+    const d = new Date(selectedLesson.date);
+    setLessonEdit({
+      date: d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"),
+      time: String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"),
+      duration: String(selectedLesson.duration),
+      subject: selectedLesson.subject,
+      location: selectedLesson.location,
+    });
+    setEditingLesson(true);
   };
+
+  const saveLessonEdit = () => {
+    const dateTime = new Date(lessonEdit.date + "T" + lessonEdit.time + ":00");
+    const updates = { date: dateTime.toISOString(), duration: parseInt(lessonEdit.duration), subject: lessonEdit.subject, location: lessonEdit.location };
+    updateLesson(selectedLesson.id, updates);
+    setSelectedLesson({ ...selectedLesson, ...updates });
+    setEditingLesson(false);
+    addToast("Lesson updated");
+  };
+
+  const le = (k, v) => setLessonEdit((f) => ({ ...f, [k]: v }));
+
+  const handleDeleteLesson = () => {
+    if (!selectedLesson) return;
+    const toDelete = { ...selectedLesson };
+    // Remove from store
+    setStore((s) => ({ ...s, lessons: s.lessons.filter((l) => l.id !== toDelete.id) }));
+    setSelectedLesson(null);
+    setDeletedLesson(toDelete);
+    // Show undo toast for 5 seconds
+    const undoId = genId();
+    setToasts((t) => [...t, { id: undoId, msg: "Lesson deleted", type: "undo", undoData: toDelete }]);
+    setTimeout(() => { setToasts((t) => t.filter((x) => x.id !== undoId)); setDeletedLesson(null); }, 5000);
+  };
+
+  const undoDeleteLesson = (lesson) => {
+    setStore((s) => ({ ...s, lessons: [...s.lessons, lesson] }));
+    setDeletedLesson(null);
+    addToast("Lesson restored");
+  };
+
+  // (Lesson detail modal is rendered inline in the main return)
 
   // ── New Lesson Modal (with Recurring) ───────────────────────
   const NewLessonModal = () => {
@@ -1624,19 +1617,22 @@ export default function TutorPulse() {
           <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>LESSONS</div>
           {studentLessons.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, padding: "8px 0" }}>No lessons yet</div>}
           {studentLessons.map((l) => (
-            <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border }}>
+            <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border, cursor: "pointer" }} onClick={() => { setSelectedStudent(null); setSelectedLesson(l); setLessonComment(l.comment || ""); }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}</div>
                   <div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div>
                 </div>
-                <Badge text={l.status} color={getStatusColor(l.status)} bg={getStatusBg(l.status)} />
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Badge text={l.status} color={getStatusColor(l.status)} bg={getStatusBg(l.status)} />
+                  <Icon name="chevRight" size={14} color={theme.textMuted} />
+                </div>
               </div>
               {l.comment && (
-                <div style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 6, paddingLeft: 8, borderLeft: "2px solid " + theme.borderLight }}>{l.comment}</div>
+                <div style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 8, borderLeft: "2px solid " + theme.borderLight }}>{l.comment}</div>
               )}
               {(l.status === "confirmed" || l.status === "pending") && (
-                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
                   <button onClick={(e) => { e.stopPropagation(); updateLesson(l.id, { status: "completed" }); addToast(l.subject + " marked completed"); }} style={{ padding: "3px 10px", borderRadius: 6, border: "none", background: theme.successBg, color: theme.success, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
                     <Icon name="check" size={11} color={theme.success} /> Completed
                   </button>
@@ -2230,15 +2226,98 @@ export default function TutorPulse() {
       {/* Toasts */}
       <div style={{ position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)", zIndex: 2000, display: "flex", flexDirection: "column", gap: 8, width: "90%", maxWidth: 400 }}>
         {toasts.map((toast) => (
-          <div key={toast.id} className="slide-up" style={{ padding: "12px 16px", borderRadius: 12, background: toast.type === "error" ? theme.dangerBg : theme.successBg, border: `1px solid ${toast.type === "error" ? theme.danger + "44" : theme.success + "44"}`, color: toast.type === "error" ? theme.danger : theme.success, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, backdropFilter: "blur(8px)" }}>
-            <Icon name={toast.type === "error" ? "x" : "check"} size={16} />
-            {toast.msg}
+          <div key={toast.id} className="slide-up" style={{ padding: "12px 16px", borderRadius: 12, background: toast.type === "error" ? theme.dangerBg : theme.type === "undo" ? theme.warningBg : theme.successBg, border: `1px solid ${toast.type === "error" ? theme.danger + "44" : toast.type === "undo" ? theme.warning + "44" : theme.success + "44"}`, color: toast.type === "error" ? theme.danger : toast.type === "undo" ? theme.warning : theme.success, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, backdropFilter: "blur(8px)" }}>
+            <Icon name={toast.type === "error" ? "x" : toast.type === "undo" ? "repeat" : "check"} size={16} />
+            <span style={{ flex: 1 }}>{toast.msg}</span>
+            {toast.type === "undo" && toast.undoData && (
+              <button onClick={() => { undoDeleteLesson(toast.undoData); setToasts((t) => t.filter((x) => x.id !== toast.id)); }} style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid " + theme.warning, background: "transparent", color: theme.warning, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Undo</button>
+            )}
           </div>
         ))}
       </div>
 
-      {/* All Modals */}
-      <LessonDetailModal />
+      {/* Lesson Detail Modal — rendered inline to prevent textarea remount */}
+      {selectedLesson && (
+        <Modal open={!!selectedLesson} onClose={() => { setSelectedLesson(null); setEditingLesson(false); }} title={editingLesson ? "Edit Lesson" : "Lesson Details"}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+            <Avatar initials={lessonDetailStudent ? lessonDetailStudent.avatar : "?"} size={48} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{lessonDetailStudent ? lessonDetailStudent.name : "Unknown"}</div>
+              <div style={{ color: theme.textSecondary, fontSize: 13 }}>{lessonDetailStudent ? lessonDetailStudent.level + " · " + lessonDetailStudent.stream : ""}</div>
+            </div>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+              <Badge text={selectedLesson.status} color={getStatusColor(selectedLesson.status)} bg={getStatusBg(selectedLesson.status)} />
+              {!editingLesson && (
+                <button onClick={startLessonEdit} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                  <Icon name="edit" size={16} color={theme.accent} />
+                </button>
+              )}
+            </div>
+          </div>
+          {!editingLesson ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>DATE</div><div style={{ fontSize: 14, fontWeight: 600 }}>{formatDate(selectedLesson.date)}</div></div>
+                <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>TIME</div><div style={{ fontSize: 14, fontWeight: 600 }}>{formatTime(selectedLesson.date)}</div></div>
+                <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>DURATION</div><div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.duration} min</div></div>
+                <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>LOCATION</div><div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.location}</div></div>
+              </div>
+              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, marginBottom: 16 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>SUBJECT</div><div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.subject}</div></div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Input label="Date" type="date" value={lessonEdit.date} onChange={(v) => le("date", v)} />
+                <Input label="Time" type="time" value={lessonEdit.time} onChange={(v) => le("time", v)} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Select label="Duration" value={lessonEdit.duration} onChange={(v) => le("duration", v)} options={[{ value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }, { value: "150", label: "150 min" }, { value: "180", label: "180 min" }]} />
+                <Select label="Location" value={lessonEdit.location} onChange={(v) => le("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
+              </div>
+              <Input label="Subject / Topic" value={lessonEdit.subject} onChange={(v) => le("subject", v)} />
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                <Button size="sm" icon="check" onClick={saveLessonEdit}>Save Changes</Button>
+                <Button size="sm" variant="secondary" onClick={() => setEditingLesson(false)}>Cancel</Button>
+              </div>
+            </>
+          )}
+          {/* Session Feedback — uncontrolled to prevent re-render on every keystroke */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Session Feedback / Notes</label>
+            <textarea key={selectedLesson.id} defaultValue={selectedLesson.comment || ""} onBlur={(e) => {
+              const val = e.target.value;
+              if (val !== (selectedLesson.comment || "")) {
+                updateLesson(selectedLesson.id, { comment: val });
+                setSelectedLesson({ ...selectedLesson, comment: val });
+                addToast("Feedback saved");
+              }
+            }} placeholder="Add feedback for this session..." rows={3} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical" }} />
+            <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>
+              <Icon name="eye" size={11} color={theme.textMuted} /> Feedback auto-saves when you tap outside. Appears in Fee Invoice.
+            </div>
+          </div>
+          {/* Actions — always show edit + delete, even for completed/cancelled */}
+          {!editingLesson && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {(selectedLesson.status === "confirmed" || selectedLesson.status === "pending") && (
+                <Button size="sm" variant="success" icon="check" onClick={() => { updateLesson(selectedLesson.id, { status: "completed" }); setSelectedLesson({ ...selectedLesson, status: "completed" }); addToast("Lesson marked as completed"); }}>Completed</Button>
+              )}
+              {selectedLesson.status === "pending" && (
+                <Button size="sm" icon="check" onClick={() => { updateLesson(selectedLesson.id, { status: "confirmed" }); setSelectedLesson({ ...selectedLesson, status: "confirmed" }); addToast("Lesson confirmed"); }} style={{ background: theme.infoBg, color: theme.info, border: "none", borderRadius: 10, cursor: "pointer" }}>Confirm</Button>
+              )}
+              {selectedLesson.status !== "cancelled" && selectedLesson.status !== "completed" && (
+                <Button size="sm" variant="danger" icon="x" onClick={() => { updateLesson(selectedLesson.id, { status: "cancelled" }); setSelectedLesson({ ...selectedLesson, status: "cancelled" }); addToast("Lesson cancelled"); }}>Cancel</Button>
+              )}
+              {(selectedLesson.status === "cancelled" || selectedLesson.status === "completed") && (
+                <Button size="sm" variant="secondary" icon="repeat" onClick={() => { updateLesson(selectedLesson.id, { status: "confirmed" }); setSelectedLesson({ ...selectedLesson, status: "confirmed" }); addToast("Lesson reverted to confirmed"); }}>Revert to Confirmed</Button>
+              )}
+              <Button size="sm" variant="secondary" icon="edit" onClick={startLessonEdit}>Edit Lesson</Button>
+              <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); if (lessonDetailStudent) setShowMessageCompose(selectedLesson.studentId); }}>Message Parent</Button>
+              <Button size="sm" variant="ghost" icon="trash" onClick={handleDeleteLesson} style={{ color: theme.danger }}>Delete</Button>
+            </div>
+          )}
+        </Modal>
+      )}
       <NewLessonModal />
       <NewStudentModal />
       <StudentDetailModal />
