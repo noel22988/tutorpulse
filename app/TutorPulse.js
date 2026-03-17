@@ -341,11 +341,12 @@ const EmptyState = ({ icon, title, sub }) => (
 );
 
 const Modal = ({ open, onClose, title, children, width = 480 }) => {
+  const modalRef = useRef(null);
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={onClose}>
-      <div className="slide-up" style={{ background: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: 20, width: "90%", maxWidth: width, maxHeight: "85vh", overflow: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: `1px solid ${theme.border}` }}>
+      <div ref={modalRef} style={{ background: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: 20, width: "90%", maxWidth: width, maxHeight: "85vh", overflow: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: `1px solid ${theme.border}`, position: "sticky", top: 0, background: theme.bgCard, zIndex: 1, borderRadius: "20px 20px 0 0" }}>
           <h3 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{title}</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted, padding: 4 }}><Icon name="x" size={20} /></button>
         </div>
@@ -1312,6 +1313,10 @@ export default function TutorPulse() {
   // MODALS
   // ═══════════════════════════════════════════════════════════
 
+  // ── Student Detail state (at parent level to prevent remount) ──
+  const [editingStudent, setEditingStudent] = useState(false);
+  const [studentEditForm, setStudentEditForm] = useState({});
+
   // ── Lesson Detail (inline — not a sub-component, to prevent textarea remount) ──
   const lessonDetailStudent = selectedLesson ? getStudent(selectedLesson.studentId) : null;
   const [editingLesson, setEditingLesson] = useState(false);
@@ -1319,7 +1324,17 @@ export default function TutorPulse() {
   const [deletedLesson, setDeletedLesson] = useState(null);
   const [returnToStudentId, setReturnToStudentId] = useState(null);
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
-  const [bulkDeleteIds, setBulkDeleteIds] = useState([]);
+  const bulkDeleteIdsRef = useRef([]);
+  const [bulkDeleteCount, setBulkDeleteCount] = useState(0);
+  const toggleBulkId = (id) => {
+    const ids = bulkDeleteIdsRef.current;
+    if (ids.includes(id)) {
+      bulkDeleteIdsRef.current = ids.filter(x => x !== id);
+    } else {
+      bulkDeleteIdsRef.current = [...ids, id];
+    }
+    setBulkDeleteCount(bulkDeleteIdsRef.current.length);
+  };
 
   const startLessonEdit = () => {
     if (!selectedLesson) return;
@@ -1518,190 +1533,7 @@ export default function TutorPulse() {
   };
 
   // ── Student Detail Modal (with Edit Mode) ───────────────────
-  const StudentDetailModal = () => {
-    if (!selectedStudent) return null;
-    const [editing, setEditing] = useState(false);
-    const [editForm, setEditForm] = useState({});
-    const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    const startEdit = () => {
-      setEditForm({
-        name: selectedStudent.name,
-        level: selectedStudent.level,
-        stream: selectedStudent.stream,
-        parent: selectedStudent.parent,
-        parentPhone: selectedStudent.parentPhone,
-        parentEmail: selectedStudent.parentEmail,
-        hourlyRate: String(selectedStudent.hourlyRate),
-        notes: selectedStudent.notes || "",
-        status: selectedStudent.status,
-      });
-      setEditing(true);
-    };
-
-    const saveEdit = () => {
-      const updates = {
-        name: editForm.name,
-        level: editForm.level,
-        stream: editForm.stream,
-        parent: editForm.parent,
-        parentPhone: editForm.parentPhone,
-        parentEmail: editForm.parentEmail,
-        hourlyRate: parseFloat(editForm.hourlyRate) || selectedStudent.hourlyRate,
-        notes: editForm.notes,
-        status: editForm.status,
-        avatar: editForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2),
-      };
-      updateStudent(selectedStudent.id, updates);
-      setSelectedStudent({ ...selectedStudent, ...updates });
-      setEditing(false);
-      addToast("Student updated");
-    };
-
-    const uf = (k, v) => setEditForm((f) => ({ ...f, [k]: v }));
-
-    return (
-      <Modal open={!!selectedStudent} onClose={() => { setSelectedStudent(null); setEditing(false); }} title={editing ? "Edit Student" : "Student Profile"} width={520}>
-
-        {!editing ? (
-          <>
-            {/* View Mode */}
-            <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid " + theme.border }}>
-              <Avatar initials={selectedStudent.avatar} size={56} color={getStatusColor(selectedStudent.status)} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 18, fontFamily: "'Playfair Display', serif" }}>{selectedStudent.name}</div>
-                <div style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>{selectedStudent.level} · {selectedStudent.stream}</div>
-                <Badge text={selectedStudent.status} color={getStatusColor(selectedStudent.status)} bg={getStatusBg(selectedStudent.status)} />
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: theme.accent, fontFamily: "'Playfair Display', serif" }}>${selectedStudent.hourlyRate}</div>
-                <div style={{ fontSize: 11, color: theme.textMuted }}>per hour</div>
-              </div>
-            </div>
-
-            <Card style={{ marginBottom: 12, padding: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>PARENT / GUARDIAN</div>
-                <button onClick={startEdit} style={{ background: "none", border: "none", cursor: "pointer", color: theme.accent, fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 3 }}>
-                  <Icon name="edit" size={12} color={theme.accent} /> Edit
-                </button>
-              </div>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedStudent.parent}</div>
-              <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentPhone}</div>
-              <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentEmail}</div>
-            </Card>
-
-            {selectedStudent.notes && (
-              <Card style={{ marginBottom: 12, padding: 14, borderLeft: "3px solid " + theme.accent }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>NOTES</div>
-                <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.notes}</div>
-              </Card>
-            )}
-          </>
-        ) : (
-          <>
-            {/* Edit Mode */}
-            <Input label="Student Name" value={editForm.name} onChange={(v) => uf("name", v)} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Select label="Level" value={editForm.level} onChange={(v) => uf("level", v)} options={LEVEL_OPTIONS} />
-              <Select label="Stream" value={editForm.stream} onChange={(v) => uf("stream", v)} options={STREAM_OPTIONS} />
-            </div>
-            <Input label="Parent Name" value={editForm.parent} onChange={(v) => uf("parent", v)} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Input label="Phone" value={editForm.parentPhone} onChange={(v) => uf("parentPhone", v)} />
-              <Input label="Email" value={editForm.parentEmail} onChange={(v) => uf("parentEmail", v)} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Input label="Hourly Rate ($)" type="number" value={editForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} />
-              <Select label="Status" value={editForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }]} />
-            </div>
-            <Input label="Notes" value={editForm.notes} onChange={(v) => uf("notes", v)} multiline />
-
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <Button size="sm" icon="check" onClick={saveEdit}>Save Changes</Button>
-              <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
-            </div>
-          </>
-        )}
-
-        {/* Lessons section (always shown) */}
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>LESSONS ({studentLessons.length})</div>
-            {studentLessons.length > 0 && (
-              <button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); setBulkDeleteIds([]); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>
-                {bulkDeleteMode ? "Done" : "Bulk Delete"}
-              </button>
-            )}
-          </div>
-          {bulkDeleteMode && bulkDeleteIds.length > 0 && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, padding: "8px 12px", background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "44" }}>
-              <span style={{ fontSize: 12, color: theme.danger, fontWeight: 600, flex: 1 }}>{bulkDeleteIds.length} selected</span>
-              <button onClick={() => setBulkDeleteIds(studentLessons.map(l => l.id))} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>Select All</button>
-              <button onClick={() => {
-                if (window.confirm("Delete " + bulkDeleteIds.length + " lessons?")) {
-                  setStore((s) => ({ ...s, lessons: s.lessons.filter(l => !bulkDeleteIds.includes(l.id)) }));
-                  addToast(bulkDeleteIds.length + " lessons deleted");
-                  setBulkDeleteIds([]);
-                  setBulkDeleteMode(false);
-                }
-              }} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: theme.danger, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Delete</button>
-            </div>
-          )}
-          {studentLessons.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, padding: "8px 0" }}>No lessons yet</div>}
-          {studentLessons.map((l) => (
-            <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border, cursor: "pointer", display: "flex", gap: 10, alignItems: "flex-start" }} onClick={() => {
-              if (bulkDeleteMode) {
-                setBulkDeleteIds((ids) => ids.includes(l.id) ? ids.filter(x => x !== l.id) : [...ids, l.id]);
-              } else {
-                setReturnToStudentId(selectedStudent.id); setSelectedStudent(null); setSelectedLesson(l); setLessonComment(l.comment || "");
-              }
-            }}>
-              {bulkDeleteMode && (
-                <div style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (bulkDeleteIds.includes(l.id) ? theme.danger : theme.borderLight), background: bulkDeleteIds.includes(l.id) ? theme.danger : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}>
-                  {bulkDeleteIds.includes(l.id) && <Icon name="check" size={12} color="white" />}
-                </div>
-              )}
-              <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}</div>
-                  <div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Badge text={l.status} color={getStatusColor(l.status)} bg={getStatusBg(l.status)} />
-                  <Icon name="chevRight" size={14} color={theme.textMuted} />
-                </div>
-              </div>
-              {l.comment && (
-                <div style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 8, borderLeft: "2px solid " + theme.borderLight }}>{l.comment}</div>
-              )}
-              {(l.status === "confirmed" || l.status === "pending") && (
-                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <button onClick={(e) => { e.stopPropagation(); updateLesson(l.id, { status: "completed" }); addToast(l.subject + " marked completed"); }} style={{ padding: "3px 10px", borderRadius: 6, border: "none", background: theme.successBg, color: theme.success, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
-                    <Icon name="check" size={11} color={theme.success} /> Completed
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); updateLesson(l.id, { status: "cancelled" }); addToast(l.subject + " cancelled"); }} style={{ padding: "3px 10px", borderRadius: 6, border: "none", background: theme.dangerBg, color: theme.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
-                    <Icon name="x" size={11} color={theme.danger} /> Cancel
-                  </button>
-                </div>
-              )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Actions */}
-        {!editing && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button size="sm" icon="edit" variant="secondary" onClick={startEdit}>Edit Details</Button>
-            <Button size="sm" icon="calendar" onClick={() => { setSelectedStudent(null); setShowNewLesson(true); }}>Schedule Lesson</Button>
-            <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setShowMessageCompose(selectedStudent.id); }}>Message Parent</Button>
-          </div>
-        )}
-      </Modal>
-    );
-  };
+  // (Student detail modal is rendered inline in the main return)
 
   // ── WhatsApp Helpers ─────────────────────────────────────────
   const formatPhoneForWA = (phone) => {
@@ -2134,7 +1966,7 @@ export default function TutorPulse() {
   const AIAssistantModal = () => {
     const [prompt, setPrompt] = useState("");
     const suggestions = [
-      "Draft a progress report for [student's name]",
+      "Draft a progress report for [student]'s parents",
       "What's my projected revenue for March?",
       "Suggest a lesson plan for P6 高级华文 阅读理解",
       "Write a mid-term assessment summary for all students",
@@ -2370,7 +2202,97 @@ export default function TutorPulse() {
       )}
       <NewLessonModal />
       <NewStudentModal />
-      <StudentDetailModal />
+      {/* Student Detail Modal — rendered inline to prevent scroll reset */}
+      {selectedStudent && (() => {
+        const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
+        const startEdit = () => {
+          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, hourlyRate: String(selectedStudent.hourlyRate), notes: selectedStudent.notes || "", status: selectedStudent.status });
+          setEditingStudent(true);
+        };
+        const saveEdit = () => {
+          const u = { name: studentEditForm.name, level: studentEditForm.level, stream: studentEditForm.stream, parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, notes: studentEditForm.notes, status: studentEditForm.status, avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+          updateStudent(selectedStudent.id, u); setSelectedStudent({ ...selectedStudent, ...u }); setEditingStudent(false); addToast("Student updated");
+        };
+        const uf = (k, v) => setStudentEditForm((f) => ({ ...f, [k]: v }));
+        return (
+          <Modal open={!!selectedStudent} onClose={() => { setSelectedStudent(null); setEditingStudent(false); setBulkDeleteMode(false); }} title={editingStudent ? "Edit Student" : "Student Profile"} width={520}>
+            {!editingStudent ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid " + theme.border }}>
+                  <Avatar initials={selectedStudent.avatar} size={56} color={getStatusColor(selectedStudent.status)} />
+                  <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 18, fontFamily: "'Playfair Display', serif" }}>{selectedStudent.name}</div><div style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>{selectedStudent.level} · {selectedStudent.stream}</div><Badge text={selectedStudent.status} color={getStatusColor(selectedStudent.status)} bg={getStatusBg(selectedStudent.status)} /></div>
+                  <div style={{ textAlign: "right" }}><div style={{ fontSize: 24, fontWeight: 700, color: theme.accent, fontFamily: "'Playfair Display', serif" }}>${selectedStudent.hourlyRate}</div><div style={{ fontSize: 11, color: theme.textMuted }}>per hour</div></div>
+                </div>
+                <Card style={{ marginBottom: 12, padding: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>PARENT / GUARDIAN</div><button onClick={startEdit} style={{ background: "none", border: "none", cursor: "pointer", color: theme.accent, fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 3 }}><Icon name="edit" size={12} color={theme.accent} /> Edit</button></div>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedStudent.parent}</div>
+                  <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentPhone}</div>
+                  <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentEmail}</div>
+                </Card>
+                {selectedStudent.notes && (<Card style={{ marginBottom: 12, padding: 14, borderLeft: "3px solid " + theme.accent }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>NOTES</div><div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.notes}</div></Card>)}
+              </>
+            ) : (
+              <>
+                <Input label="Student Name" value={studentEditForm.name} onChange={(v) => uf("name", v)} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Select label="Level" value={studentEditForm.level} onChange={(v) => uf("level", v)} options={LEVEL_OPTIONS} /><Select label="Stream" value={studentEditForm.stream} onChange={(v) => uf("stream", v)} options={STREAM_OPTIONS} /></div>
+                <Input label="Parent Name" value={studentEditForm.parent} onChange={(v) => uf("parent", v)} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Phone" value={studentEditForm.parentPhone} onChange={(v) => uf("parentPhone", v)} /><Input label="Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }]} /></div>
+                <Input label="Notes" value={studentEditForm.notes} onChange={(v) => uf("notes", v)} multiline />
+                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}><Button size="sm" icon="check" onClick={saveEdit}>Save Changes</Button><Button size="sm" variant="secondary" onClick={() => setEditingStudent(false)}>Cancel</Button></div>
+              </>
+            )}
+            {/* Lessons */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>LESSONS ({studentLessons.length})</div>
+                {studentLessons.length > 0 && (<button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); bulkDeleteIdsRef.current = []; setBulkDeleteCount(0); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{bulkDeleteMode ? "Done" : "Bulk Delete"}</button>)}
+              </div>
+              {bulkDeleteMode && (
+                <div id="bulk-bar" style={{ display: bulkDeleteCount > 0 ? "flex" : "none", gap: 8, alignItems: "center", marginBottom: 10, padding: "8px 12px", background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "44", position: "sticky", top: 0, zIndex: 2 }}>
+                  <span id="bulk-count" style={{ fontSize: 12, color: theme.danger, fontWeight: 600, flex: 1 }}>{bulkDeleteCount} selected</span>
+                  <button onClick={() => { bulkDeleteIdsRef.current = studentLessons.map(l => l.id); setBulkDeleteCount(studentLessons.length); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>Select All</button>
+                  <button onClick={() => { const ids = bulkDeleteIdsRef.current; if (window.confirm("Delete " + ids.length + " lessons?")) { setStore((s) => ({ ...s, lessons: s.lessons.filter(l => !ids.includes(l.id)) })); addToast(ids.length + " lessons deleted"); bulkDeleteIdsRef.current = []; setBulkDeleteCount(0); setBulkDeleteMode(false); } }} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: theme.danger, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Delete</button>
+                </div>
+              )}
+              {studentLessons.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, padding: "8px 0" }}>No lessons yet</div>}
+              {studentLessons.map((l) => (
+                <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border, cursor: "pointer", display: "flex", gap: 10, alignItems: "flex-start" }} onClick={(e) => {
+                  if (bulkDeleteMode) {
+                    const ids = bulkDeleteIdsRef.current; const isSelected = ids.includes(l.id);
+                    bulkDeleteIdsRef.current = isSelected ? ids.filter(x => x !== l.id) : [...ids, l.id];
+                    const cb = e.currentTarget.querySelector("[data-cb]");
+                    if (cb) { const now = !isSelected; cb.style.borderColor = now ? theme.danger : theme.borderLight; cb.style.background = now ? theme.danger : "transparent"; cb.innerHTML = now ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''; }
+                    const countEl = document.getElementById("bulk-count"); const count = bulkDeleteIdsRef.current.length; if (countEl) countEl.textContent = count + " selected"; const bar = document.getElementById("bulk-bar"); if (bar) bar.style.display = count > 0 ? "flex" : "none";
+                  } else { setReturnToStudentId(selectedStudent.id); setSelectedStudent(null); setSelectedLesson(l); setLessonComment(l.comment || ""); }
+                }}>
+                  {bulkDeleteMode && (<div data-cb="1" style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + theme.borderLight, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}></div>)}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div></div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><Badge text={l.status} color={getStatusColor(l.status)} bg={getStatusBg(l.status)} />{!bulkDeleteMode && <Icon name="chevRight" size={14} color={theme.textMuted} />}</div>
+                    </div>
+                    {l.comment && (<div style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 8, borderLeft: "2px solid " + theme.borderLight }}>{l.comment}</div>)}
+                    {!bulkDeleteMode && (l.status === "confirmed" || l.status === "pending") && (
+                      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                        <button onClick={(e) => { e.stopPropagation(); updateLesson(l.id, { status: "completed" }); addToast(l.subject + " marked completed"); }} style={{ padding: "3px 10px", borderRadius: 6, border: "none", background: theme.successBg, color: theme.success, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4 }}><Icon name="check" size={11} color={theme.success} /> Completed</button>
+                        <button onClick={(e) => { e.stopPropagation(); updateLesson(l.id, { status: "cancelled" }); addToast(l.subject + " cancelled"); }} style={{ padding: "3px 10px", borderRadius: 6, border: "none", background: theme.dangerBg, color: theme.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4 }}><Icon name="x" size={11} color={theme.danger} /> Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!editingStudent && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button size="sm" icon="edit" variant="secondary" onClick={startEdit}>Edit Details</Button>
+                <Button size="sm" icon="calendar" onClick={() => { setSelectedStudent(null); setShowNewLesson(true); }}>Schedule Lesson</Button>
+                <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setShowMessageCompose(selectedStudent.id); }}>Message Parent</Button>
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
       {showMessageCompose && <MessageComposeModal />}
       <AIAssistantModal />
       <NotificationsPanel />
