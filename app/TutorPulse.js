@@ -1,7 +1,17 @@
-"use client";
-
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import * as XLSX from "xlsx";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>TutorPulse</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body style="margin:0;background:#0A0E17">
+<div id="root"></div>
+<script type="text/babel" data-type="module">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 // ═══════════════════════════════════════════════════════════════
 // TUTORPULSE — Intelligent Tutor Scheduling & Fee Management
@@ -17,7 +27,7 @@ const createStore = () => {
   const m = now.getMonth();
 
   const students = [
-    { id: "s1", name: "Ethan Tan", level: "P5", stream: "华文", parent: "Mrs. Tan", parentPhone: "+65 9123 4567", parentEmail: "tan.mei@email.com", hourlyRate: 70, status: "active", joinDate: "2025-01-15", notes: "Needs extra help with 作文", avatar: "ET" },
+    { id: "s1", name: "Ethan Tan", level: "P5", stream: "华文", parent: "Mrs. Tan", parentPhone: "+65 9123 4567", parentEmail: "tan.mei@email.com", hourlyRate: 70, status: "active", joinDate: "2025-01-15", notes: "Needs extra help with 作文", avatar: "ET", billingMode: "monthly" },
     { id: "s2", name: "Chloe Wong", level: "P6", stream: "高级华文", parent: "Mr. Wong", parentPhone: "+65 9234 5678", parentEmail: "wong.kh@email.com", hourlyRate: 80, status: "active", joinDate: "2024-08-01", notes: "Preparing for PSLE, strong in 阅读理解", avatar: "CW" },
     { id: "s3", name: "Ryan Lim", level: "Sec 3", stream: "O-Level Chinese", parent: "Mrs. Lim", parentPhone: "+65 9345 6789", parentEmail: "lim.sy@email.com", hourlyRate: 90, status: "active", joinDate: "2025-03-01", notes: "Focus on Paper 1 Email Writing", avatar: "RL" },
     { id: "s4", name: "Sophie Chen", level: "P5", stream: "华文", parent: "Mrs. Chen", parentPhone: "+65 9456 7890", parentEmail: "chen.jy@email.com", hourlyRate: 70, status: "active", joinDate: "2024-06-15", notes: "Good progress, encourage more 口试 practice", avatar: "SC" },
@@ -71,7 +81,7 @@ const createStore = () => {
   ];
 
   const revenueHistory = [];
-  const settings = { tutorName: "Leon" };
+  const settings = { tutorName: "Leon", paymentInfo: "PayNow to UEN 202410124E", paymentDeadline: "10th of each month", accentColor: "#F59E0B" };
 
   return { students, lessons, payments, messages, notifications, revenueHistory, settings };
 };
@@ -140,33 +150,52 @@ const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
 };
 
 // ── Theme & Styles ──────────────────────────────────────────
-const theme = {
-  bg: "#0A0E17",
-  bgCard: "#111827",
-  bgCardHover: "#1A2332",
-  bgElevated: "#1E293B",
-  bgInput: "#0F172A",
-  border: "#1E293B",
-  borderLight: "#2D3B4F",
-  text: "#F1F5F9",
-  textSecondary: "#94A3B8",
-  textMuted: "#64748B",
-  accent: "#F59E0B",
-  accentLight: "#FBBF24",
-  accentDark: "#D97706",
-  accentBg: "rgba(245, 158, 11, 0.1)",
-  accentBgStrong: "rgba(245, 158, 11, 0.2)",
-  success: "#10B981",
-  successBg: "rgba(16, 185, 129, 0.1)",
-  danger: "#EF4444",
-  dangerBg: "rgba(239, 68, 68, 0.1)",
-  warning: "#F59E0B",
-  warningBg: "rgba(245, 158, 11, 0.1)",
-  info: "#3B82F6",
-  infoBg: "rgba(59, 130, 246, 0.1)",
-  purple: "#8B5CF6",
-  purpleBg: "rgba(139, 92, 246, 0.1)",
+// Theme is built dynamically — accent colour is customisable
+const buildTheme = (accentHex = "#F59E0B") => {
+  // Convert hex to rgb components for rgba usage
+  const hex = accentHex.replace("#", "");
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  // Derive a darker shade for accentDark
+  const darken = (v) => Math.max(0, Math.round(v * 0.8));
+  const dHex = (v) => darken(v).toString(16).padStart(2, "0");
+  const accentDark = "#" + dHex(r) + dHex(g) + dHex(b);
+  // Derive a lighter shade for accentLight
+  const lighten = (v) => Math.min(255, Math.round(v + (255 - v) * 0.2));
+  const lHex = (v) => lighten(v).toString(16).padStart(2, "0");
+  const accentLight = "#" + lHex(r) + lHex(g) + lHex(b);
+  return {
+    bg: "#0A0E17",
+    bgCard: "#111827",
+    bgCardHover: "#1A2332",
+    bgElevated: "#1E293B",
+    bgInput: "#0F172A",
+    border: "#1E293B",
+    borderLight: "#2D3B4F",
+    text: "#F1F5F9",
+    textSecondary: "#94A3B8",
+    textMuted: "#64748B",
+    accent: accentHex,
+    accentLight,
+    accentDark,
+    accentBg: `rgba(${r}, ${g}, ${b}, 0.1)`,
+    accentBgStrong: `rgba(${r}, ${g}, ${b}, 0.2)`,
+    success: "#10B981",
+    successBg: "rgba(16, 185, 129, 0.1)",
+    danger: "#EF4444",
+    dangerBg: "rgba(239, 68, 68, 0.1)",
+    warning: "#F59E0B",
+    warningBg: "rgba(245, 158, 11, 0.1)",
+    info: "#3B82F6",
+    infoBg: "rgba(59, 130, 246, 0.1)",
+    purple: "#8B5CF6",
+    purpleBg: "rgba(139, 92, 246, 0.1)",
+  };
 };
+
+// Default theme (overridden at runtime from settings)
+const theme = buildTheme();
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:wght@400;500;600;700&display=swap');
@@ -230,6 +259,8 @@ const LEVEL_OPTIONS = [
   { value: "Sec 3", label: "Secondary 3" }, { value: "Sec 4", label: "Secondary 4" },
   { value: "Sec 5", label: "Secondary 5" },
   { value: "JC 1", label: "JC 1" },
+  { value: "JC 2", label: "JC 2" },
+  { value: "__other__", label: "Others..." },
 ];
 const STREAM_OPTIONS = [
   { value: "小学普华", label: "小学普华" },
@@ -239,7 +270,23 @@ const STREAM_OPTIONS = [
   { value: "G3华文", label: "G3华文" },
   { value: "中学高华", label: "中学高华" },
   { value: "H1华文", label: "H1华文" },
+  { value: "__other__", label: "Others..." },
 ];
+// Helper: renders a Select that shows a text input when "Others" is chosen
+const LevelStreamSelect = ({ label, value, onChange, options, style = {} }) => {
+  const isOther = value && !options.some(o => o.value === value && o.value !== "__other__");
+  return (
+    <div style={{ marginBottom: 16, ...style }}>
+      {label && <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</label>}
+      <select value={isOther ? "__other__" : value} onChange={(e) => { if (e.target.value !== "__other__") onChange(e.target.value); else onChange(""); }} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14, cursor: "pointer", appearance: "none", marginBottom: isOther ? 8 : 0 }}>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {isOther && (
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Enter custom level/stream..." style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.accent + "88", borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+      )}
+    </div>
+  );
+};
 const formatDate = (d) => {
   const date = new Date(d);
   return date.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
@@ -253,12 +300,23 @@ const formatMonth = (m) => {
   return new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString("en-SG", { month: "long", year: "numeric" });
 };
 const genId = () => Math.random().toString(36).substr(2, 9);
+const stripMarkdown = (text) => {
+  return text
+    .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/_{1,3}(.*?)_{1,3}/g, '$1')
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/`{1,3}(.*?)`{1,3}/gs, '$1')
+    .replace(/^\s*[-*+]\s+/gm, '• ')
+    .trim();
+};
 const getStatusColor = (s) => {
-  const map = { confirmed: theme.success, pending: theme.warning, cancelled: theme.danger, completed: theme.info, paid: theme.success, overdue: theme.danger, active: theme.success, trial: theme.info, paused: theme.textMuted };
+  const map = { confirmed: theme.success, pending: theme.warning, cancelled: theme.danger, completed: theme.info, paid: theme.success, overdue: theme.danger, active: theme.success, trial: theme.info, paused: theme.textMuted, graduated: theme.purple };
   return map[s] || theme.textSecondary;
 };
 const getStatusBg = (s) => {
-  const map = { confirmed: theme.successBg, pending: theme.warningBg, cancelled: theme.dangerBg, completed: theme.infoBg, paid: theme.successBg, overdue: theme.dangerBg, active: theme.successBg, trial: theme.infoBg, paused: "rgba(100,116,139,0.1)" };
+  const map = { confirmed: theme.successBg, pending: theme.warningBg, cancelled: theme.dangerBg, completed: theme.infoBg, paid: theme.successBg, overdue: theme.dangerBg, active: theme.successBg, trial: theme.infoBg, paused: "rgba(100,116,139,0.1)", graduated: "rgba(139,92,246,0.1)" };
   return map[s] || "rgba(148,163,184,0.1)";
 };
 
@@ -266,6 +324,12 @@ const getStatusBg = (s) => {
 const Badge = ({ text, color, bg }) => (
   <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase", color: color, background: bg }}>
     {text}
+  </span>
+);
+
+const PremiumBadge = () => (
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, background: "linear-gradient(135deg, #F59E0B22, #D9770622)", border: "1px solid #F59E0B66", color: "#F59E0B" }}>
+    ✦ Premium
   </span>
 );
 
@@ -371,7 +435,7 @@ const TabBar = ({ tabs, active, onChange }) => (
 // ═══════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════
-export default function TutorPulse() {
+function TutorPulse() {
   const [store, setStore] = useState(createStore);
   const [loaded, setLoaded] = useState(false);
   const [page, setPage] = useState("home");
@@ -386,6 +450,10 @@ export default function TutorPulse() {
   const [showAI, setShowAI] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiHistory, setAiHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tutorpulse-ai-history") || "[]"); } catch { return []; }
+  });
+  const [showAIHistory, setShowAIHistory] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [paymentFilter, setPaymentFilter] = useState("all");
@@ -412,6 +480,14 @@ export default function TutorPulse() {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [store, loaded]);
   const [adminTab, setAdminTab] = useState("overview");
+  // ── Page-level state lifted to prevent remount reset on clock tick ──
+  const [scheduleViewMode, setScheduleViewMode] = useState("today");
+  const [scheduleSelectedDay, setScheduleSelectedDay] = useState(null);
+  const [studentsFilter, setStudentsFilter] = useState("all");
+  const [messagesSelectedParent, setMessagesSelectedParent] = useState(null);
+
+  // Dynamic theme based on accent colour setting
+  const theme = buildTheme(store.settings?.accentColor || "#F59E0B");
 
   const addToast = useCallback((msg, type = "success") => {
     const id = genId();
@@ -438,7 +514,7 @@ export default function TutorPulse() {
   }, [addToast]);
 
   const addStudent = useCallback((student) => {
-    setStore((s) => ({ ...s, students: [...s.students, { ...student, id: "s" + genId() }] }));
+    setStore((s) => ({ ...s, students: [...s.students, { ...student, id: "s" + genId(), grades: student.grades || [] }] }));
     addToast("Student added successfully");
   }, [addToast]);
 
@@ -512,13 +588,18 @@ export default function TutorPulse() {
     return Array.from(studentsWithLessons).filter(sid => !paidStudents.has(sid));
   }, [store.students, store.lessons, store.payments, now]);
   const activeStudents = useMemo(() => store.students.filter((s) => s.status === "active"), [store.students]);
-  const monthlyRevenue = useMemo(() => store.payments.filter((p) => p.status === "paid" && p.month === "2026-02").reduce((sum, p) => {
+  const billableStudents = useMemo(() => store.students.filter((s) => s.status === "active" || s.status === "trial"), [store.students]);
+  const currentMonthStr = useMemo(() => now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0"), [now]);
+  const monthlyRevenue = useMemo(() => store.payments.filter((p) => p.status === "paid" && p.month === currentMonthStr).reduce((sum, p) => {
     const calc = calcMonthlyFee(p.studentId, p.month);
     return sum + calc.total;
   }, 0), [store.payments, calcMonthlyFee]);
   const unreadNotifs = useMemo(() => store.notifications.filter((n) => !n.read).length, [store.notifications]);
 
   // ── AI Assistant ────────────────────────────────────────────
+  const paymentInfo = store.settings?.paymentInfo || "PayNow to UEN 202410124E";
+  const paymentDeadline = store.settings?.paymentDeadline || "10th of each month";
+
   const callAI = useCallback(async (prompt) => {
     setAiLoading(true);
     setAiResult("");
@@ -536,7 +617,14 @@ export default function TutorPulse() {
       });
       const data = await response.json();
       const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
-      setAiResult(text || "I couldn't generate a response. Please try again.");
+      const result = text || "I couldn't generate a response. Please try again.";
+      setAiResult(result);
+      setAiHistory(prev => {
+        const entry = { id: genId(), prompt, result, date: new Date().toISOString() };
+        const next = [entry, ...prev].slice(0, 30);
+        try { localStorage.setItem("tutorpulse-ai-history", JSON.stringify(next)); } catch {}
+        return next;
+      });
     } catch (err) {
       setAiResult("AI is temporarily unavailable. Please try again later.");
     }
@@ -549,6 +637,7 @@ export default function TutorPulse() {
     { id: "schedule", icon: "calendar", label: "Schedule" },
     { id: "students", icon: "users", label: "Students" },
     { id: "payments", icon: "dollar", label: "Fees" },
+    { id: "messages", icon: "message", label: "Messages" },
     { id: "admin", icon: "chart", label: "Admin" },
   ];
 
@@ -622,6 +711,7 @@ export default function TutorPulse() {
           <Card hover onClick={() => setShowAI(true)} style={{ padding: 16, textAlign: "center" }}>
             <Icon name="ai" size={24} color={theme.purple} />
             <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>AI Assistant</div>
+            <div style={{ marginTop: 4, display: "flex", justifyContent: "center" }}><PremiumBadge /></div>
           </Card>
           <Card hover onClick={() => setShowMessageCompose("bulk")} style={{ padding: 16, textAlign: "center" }}>
             <Icon name="send" size={24} color={theme.success} />
@@ -631,19 +721,23 @@ export default function TutorPulse() {
       </div>
 
       {/* Alerts */}
-      {pendingPayments.filter(p => p.status === "overdue").length > 0 && (
-        <Card style={{ padding: 16, borderColor: `${theme.danger}44`, background: theme.dangerBg, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Icon name="bell" size={18} color={theme.danger} />
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14, color: theme.danger }}>Overdue Payments</div>
-              <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
-                {pendingPayments.filter(p => p.status === "overdue").map(p => getStudent(p.studentId)?.name).filter(Boolean).join(", ")} — March fees overdue
+      {(() => {
+        const overduePayments = store.payments.filter(p => p.status === "overdue");
+        if (overduePayments.length === 0) return null;
+        return (
+          <Card style={{ padding: 16, borderColor: `${theme.danger}44`, background: theme.dangerBg, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Icon name="bell" size={18} color={theme.danger} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: theme.danger }}>Overdue Payments</div>
+                <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                  {overduePayments.map(p => getStudent(p.studentId)?.name).filter(Boolean).join(", ")} — fees overdue
+                </div>
               </div>
             </div>
-          </div>
-        </Card>
-      )}
+          </Card>
+        );
+      })()}
     </div>
   );
 
@@ -651,8 +745,10 @@ export default function TutorPulse() {
   // PAGE: SCHEDULE / CALENDAR
   // ═══════════════════════════════════════════════════════════
   const SchedulePage = () => {
-    const [viewMode, setViewMode] = useState("today");
-    const [selectedDay, setSelectedDay] = useState(null);
+    const viewMode = scheduleViewMode;
+    const setViewMode = setScheduleViewMode;
+    const selectedDay = scheduleSelectedDay;
+    const setSelectedDay = setScheduleSelectedDay;
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -720,6 +816,23 @@ export default function TutorPulse() {
             {todayAllLessons.length === 0 ? (
               <EmptyState icon="calendar" title="No lessons today" sub="Enjoy your day off!" />
             ) : todayAllLessons.map(renderLessonCard)}
+            {(() => {
+              const tomorrow = new Date(now);
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              const tomorrowLessons = store.lessons.filter((l) => {
+                const d = new Date(l.date);
+                return d.getDate() === tomorrow.getDate() && d.getMonth() === tomorrow.getMonth() && d.getFullYear() === tomorrow.getFullYear() && l.status !== "cancelled";
+              }).sort((a, b) => new Date(a.date) - new Date(b.date));
+              if (tomorrowLessons.length === 0) return null;
+              return (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8, paddingLeft: 4 }}>
+                    Tomorrow — {tomorrow.toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "short" })}
+                  </div>
+                  {tomorrowLessons.map(renderLessonCard)}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -761,9 +874,9 @@ export default function TutorPulse() {
                         <>
                           <div style={{ fontSize: 13, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? theme.accent : isToday ? theme.accent : theme.text, marginBottom: 2 }}>{day}</div>
                           {lessons.length > 0 && (
-                            <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap" }}>
-                              {lessons.slice(0, 3).map((l, j) => (
-                                <div key={j} style={{ width: 6, height: 6, borderRadius: 3, background: getStatusColor(l.status) }} />
+                            <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap", maxWidth: "100%" }}>
+                              {lessons.map((l, j) => (
+                                <div key={j} style={{ width: 5, height: 5, borderRadius: 3, background: getStatusColor(l.status), flexShrink: 0 }} />
                               ))}
                             </div>
                           )}
@@ -797,9 +910,17 @@ export default function TutorPulse() {
   // PAGE: STUDENTS
   // ═══════════════════════════════════════════════════════════
   const StudentsPage = () => {
-    const [filter, setFilter] = useState("all");
+    const filter = studentsFilter;
+    const setFilter = setStudentsFilter;
     const filtered = filter === "all" ? store.students : store.students.filter((s) => s.status === filter);
-    const searched = (searchQuery ? filtered.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.level.toLowerCase().includes(searchQuery.toLowerCase())) : filtered).sort((a, b) => a.name.localeCompare(b.name));
+    const [localSearch, setLocalSearch] = useState(searchQuery);
+    const searchDebounceRef = useRef(null);
+    const handleSearchChange = (val) => {
+      setLocalSearch(val);
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = setTimeout(() => setSearchQuery(val), 200);
+    };
+    const searched = (localSearch ? filtered.filter((s) => s.name.toLowerCase().includes(localSearch.toLowerCase()) || s.level.toLowerCase().includes(localSearch.toLowerCase())) : filtered).sort((a, b) => a.name.localeCompare(b.name));
 
     return (
       <div className="fade-in">
@@ -811,7 +932,7 @@ export default function TutorPulse() {
         {/* Search */}
         <div style={{ position: "relative", marginBottom: 16 }}>
           <Icon name="search" size={16} color={theme.textMuted} className="" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search students..." style={{ width: "100%", padding: "10px 14px 10px 36px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+          <input value={localSearch} onChange={(e) => handleSearchChange(e.target.value)} placeholder="Search students..." style={{ width: "100%", padding: "10px 14px 10px 36px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
           <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
             <Icon name="search" size={16} color={theme.textMuted} />
           </div>
@@ -819,7 +940,7 @@ export default function TutorPulse() {
 
         {/* Filter tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto" }}>
-          {["all", "active", "trial", "paused"].map((f) => (
+          {["all", "active", "trial", "paused", "graduated"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${filter === f ? theme.accent : theme.border}`, background: filter === f ? theme.accentBg : "transparent", color: filter === f ? theme.accent : theme.textSecondary, fontSize: 12, fontWeight: 600, cursor: "pointer", textTransform: "capitalize", whiteSpace: "nowrap", fontFamily: "'DM Sans', sans-serif" }}>
               {f} {f === "all" ? `(${store.students.length})` : `(${store.students.filter(s => s.status === f).length})`}
             </button>
@@ -846,7 +967,35 @@ export default function TutorPulse() {
               </div>
             </Card>
           ))}
+          {searched.length === 0 && <EmptyState icon="users" title="No students found" sub="Try adjusting your search or filter" />}
         </div>
+        {/* Graduated students section */}
+        {(() => {
+          const graduated = store.students.filter(s => s.status === "graduated");
+          if (graduated.length === 0 || (filter !== "all" && filter !== "graduated")) return null;
+          return (
+            <div style={{ marginTop: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: theme.purple }}>🎓 Alumni / Graduated</span>
+                <span style={{ fontSize: 11, color: theme.textMuted }}>({graduated.length})</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {graduated.map((student) => (
+                  <Card key={student.id} hover onClick={() => setSelectedStudent(student)} style={{ padding: 12, opacity: 0.75 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <Avatar initials={student.avatar} size={36} color={theme.purple} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{student.name}</div>
+                        <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} · {student.stream}</div>
+                      </div>
+                      <Badge text="graduated" color={theme.purple} bg="rgba(139,92,246,0.1)" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -1043,7 +1192,8 @@ export default function TutorPulse() {
   // ═══════════════════════════════════════════════════════════
   const MessagesPage = () => {
     const [newMsg, setNewMsg] = useState("");
-    const [selectedParent, setSelectedParent] = useState(null);
+    const selectedParent = messagesSelectedParent;
+    const setSelectedParent = setMessagesSelectedParent;
 
     const parentThreads = useMemo(() => {
       const threads = {};
@@ -1180,11 +1330,21 @@ export default function TutorPulse() {
 
         {adminTab === "overview" && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-              <StatCard icon="dollar" label={now.toLocaleDateString("en-SG", { month: "short" }) + " Rev"} value={`$${totalMonthly.toLocaleString()}`} color={theme.success} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
+              <StatCard icon="dollar" label={now.toLocaleDateString("en-SG", { month: "short" }) + " Revenue"} value={`$${totalMonthly.toLocaleString()}`} color={theme.success} />
               <StatCard icon="users" label="Avg / Student" value={`$${avgFee}`} color={theme.info} />
-              <StatCard icon="check" label="Completion" value={`${completionRate}%`} color={theme.accent} />
-              <StatCard icon="dollar" label="Collection" value={`${collectionRate}%`} sub="Last month" color={theme.purple} />
+              <StatCard icon="check" label="Lesson Completion" value={`${completionRate}%`} color={theme.accent} />
+              <StatCard icon="dollar" label="Fee Collection" value={`${collectionRate}%`} sub="Last month" color={theme.purple} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+              {[
+                { label: now.toLocaleDateString("en-SG", { month: "short" }) + " Revenue", desc: "Total fees from completed & scheduled lessons this month" },
+                { label: "Avg / Student", desc: "Average monthly fee per active student" },
+                { label: "Lesson Completion", desc: "% of lessons marked confirmed or completed" },
+                { label: "Fee Collection", desc: "% of last month's fees successfully collected" },
+              ].map((item, i) => (
+                <div key={i} style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.4, padding: "0 2px" }}>{item.desc}</div>
+              ))}
             </div>
 
             {/* Revenue Chart */}
@@ -1202,7 +1362,7 @@ export default function TutorPulse() {
             </Card>
 
             {/* Student breakdown by stream */}
-            <Card>
+            <Card style={{ marginBottom: 16 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Students by Stream</h3>
               {(() => {
                 const colors = [theme.accent, theme.info, theme.purple, theme.success, theme.warning, theme.danger, theme.textSecondary];
@@ -1217,36 +1377,80 @@ export default function TutorPulse() {
                 ));
               })()}
             </Card>
-          </>
-        )}
 
-        {adminTab === "analytics" && (
-          <>
-            <Card style={{ marginBottom: 12 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, fontFamily: "'Playfair Display', serif" }}>Revenue Forecast</h3>
-              <p style={{ fontSize: 13, color: theme.textSecondary }}>Projected March revenue based on scheduled sessions: <strong style={{ color: theme.success }}>${totalMonthly.toLocaleString()}</strong></p>
-            </Card>
-            <Card style={{ marginBottom: 12 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, fontFamily: "'Playfair Display', serif" }}>Cancellation Rate</h3>
-              <p style={{ fontSize: 13, color: theme.textSecondary }}>Cancelled lessons this month: <strong style={{ color: theme.warning }}>{store.lessons.filter(l => { const d = new Date(l.date); return d.getMonth() === new Date().getMonth() && l.status === "cancelled"; }).length}</strong> out of {store.lessons.filter(l => { const d = new Date(l.date); return d.getMonth() === new Date().getMonth(); }).length} total</p>
-            </Card>
-            <Card style={{ marginBottom: 12 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, fontFamily: "'Playfair Display', serif" }}>Student Overview</h3>
-              <p style={{ fontSize: 13, color: theme.textSecondary }}><strong style={{ color: theme.success }}>{activeStudents.length}</strong> active · <strong style={{ color: theme.info }}>{store.students.filter(s => s.status === "trial").length}</strong> on trial · <strong style={{ color: theme.textMuted }}>{store.students.filter(s => s.status === "paused").length}</strong> paused</p>
-            </Card>
+            {/* Student List */}
             <Card>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, fontFamily: "'Playfair Display', serif" }}>Session Rates</h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {activeStudents.map((s) => (
-                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: theme.textSecondary }}>
-                    <span>{s.name} ({s.level})</span>
-                    <span style={{ fontWeight: 600, color: theme.text }}>${s.hourlyRate}/hr</span>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Student List</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {store.students.filter(s => s.status !== "graduated").map((student) => (
+                  <div key={student.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid " + theme.border }}>
+                    <Avatar initials={student.avatar} size={32} color={getStatusColor(student.status)} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{student.name}</div>
+                      <div style={{ fontSize: 11, color: theme.textSecondary }}>{student.level} · {student.stream}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: theme.accent }}>${student.hourlyRate}/hr</div>
+                      <Badge text={student.status} color={getStatusColor(student.status)} bg={getStatusBg(student.status)} />
+                    </div>
                   </div>
                 ))}
               </div>
             </Card>
           </>
         )}
+
+        {adminTab === "analytics" && (() => {
+          const [visibleMetrics, setVisibleMetrics] = useState(() => {
+            try { return JSON.parse(localStorage.getItem("tp-analytics-toggles") || "null") || { forecast: true, cancellation: true, attendance: true, perStudent: true, avgDuration: true, paymentTurnaround: true }; } catch { return { forecast: true, cancellation: true, attendance: true, perStudent: true, avgDuration: true, paymentTurnaround: true }; }
+          });
+          const toggleMetric = (key) => setVisibleMetrics(prev => { const next = { ...prev, [key]: !prev[key] }; try { localStorage.setItem("tp-analytics-toggles", JSON.stringify(next)); } catch {} return next; });
+
+          const thisMonthLessons = store.lessons.filter(l => { const d = new Date(l.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+          const cancelledCount = thisMonthLessons.filter(l => l.status === "cancelled").length;
+          const completedCount = thisMonthLessons.filter(l => l.status === "completed" || l.status === "confirmed").length;
+          const attendanceRate = thisMonthLessons.length > 0 ? Math.round((completedCount / thisMonthLessons.length) * 100) : 0;
+          const avgDuration = thisMonthLessons.length > 0 ? Math.round(thisMonthLessons.reduce((s, l) => s + l.duration, 0) / thisMonthLessons.length) : 0;
+          const paidPayments = store.payments.filter(p => p.status === "paid" && p.paidDate && p.month);
+          const turnarounds = paidPayments.map(p => {
+            const [y, m] = p.month.split("-").map(Number);
+            const dueDate = new Date(y, m - 1, 10);
+            const paidDate = new Date(p.paidDate);
+            return Math.round((paidDate - dueDate) / (1000 * 60 * 60 * 24));
+          });
+          const avgTurnaround = turnarounds.length > 0 ? Math.round(turnarounds.reduce((a, b) => a + b, 0) / turnarounds.length) : null;
+
+          const metrics = [
+            { key: "forecast", label: "Revenue Forecast", content: () => <p style={{ fontSize: 13, color: theme.textSecondary }}>Projected {now.toLocaleDateString("en-SG", { month: "long" })} revenue: <strong style={{ color: theme.success }}>${totalMonthly.toLocaleString()}</strong></p> },
+            { key: "cancellation", label: "Cancellation Rate", content: () => <p style={{ fontSize: 13, color: theme.textSecondary }}>Cancelled this month: <strong style={{ color: theme.warning }}>{cancelledCount}</strong> of {thisMonthLessons.length} lessons ({thisMonthLessons.length > 0 ? Math.round(cancelledCount / thisMonthLessons.length * 100) : 0}%)</p> },
+            { key: "attendance", label: "Attendance Rate", content: () => <p style={{ fontSize: 13, color: theme.textSecondary }}>Lessons completed or confirmed: <strong style={{ color: theme.success }}>{attendanceRate}%</strong> ({completedCount} of {thisMonthLessons.length})</p> },
+            { key: "perStudent", label: "Lessons per Student", content: () => <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{activeStudents.map(s => { const count = thisMonthLessons.filter(l => l.studentId === s.id).length; return <div key={s.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: theme.textSecondary }}><span>{s.name}</span><strong style={{ color: theme.text }}>{count} lesson{count !== 1 ? "s" : ""}</strong></div>; })}</div> },
+            { key: "avgDuration", label: "Avg Lesson Duration", content: () => <p style={{ fontSize: 13, color: theme.textSecondary }}>Average session length this month: <strong style={{ color: theme.info }}>{avgDuration} min</strong></p> },
+            { key: "paymentTurnaround", label: "Payment Turnaround", content: () => <p style={{ fontSize: 13, color: theme.textSecondary }}>{avgTurnaround !== null ? <>Average days to pay after due date: <strong style={{ color: avgTurnaround <= 0 ? theme.success : avgTurnaround <= 7 ? theme.warning : theme.danger }}>{avgTurnaround > 0 ? "+" : ""}{avgTurnaround} days</strong></> : "Not enough payment data yet."}</p> },
+          ];
+
+          return (
+            <>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+                {metrics.map(m => (
+                  <button key={m.key} onClick={() => toggleMetric(m.key)} style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid " + (visibleMetrics[m.key] ? theme.accent : theme.border), background: visibleMetrics[m.key] ? theme.accentBg : "transparent", color: visibleMetrics[m.key] ? theme.accent : theme.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                    {visibleMetrics[m.key] ? "✓ " : ""}{m.label}
+                  </button>
+                ))}
+              </div>
+              {metrics.filter(m => visibleMetrics[m.key]).map(m => (
+                <Card key={m.key} style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{m.label}</h3>
+                    <button onClick={() => toggleMetric(m.key)} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted, fontSize: 14, padding: 0 }}>×</button>
+                  </div>
+                  {m.content()}
+                </Card>
+              ))}
+              {metrics.filter(m => visibleMetrics[m.key]).length === 0 && <div style={{ textAlign: "center", color: theme.textMuted, fontSize: 13, padding: 24 }}>All metrics hidden. Tap a tag above to show.</div>}
+            </>
+          );
+        })()}
 
         {adminTab === "manage" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1263,43 +1467,98 @@ export default function TutorPulse() {
               </Card>
             ))}
 
+            {/* Profile Settings */}
+            <Card style={{ padding: 14, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>PROFILE</div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: theme.textSecondary, flexShrink: 0 }}>Display Name</span>
+                <input
+                  type="text"
+                  defaultValue={store.settings?.tutorName || ""}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val !== (store.settings?.tutorName || "")) {
+                      setStore((s) => ({ ...s, settings: { ...(s.settings || {}), tutorName: val } }));
+                      addToast("Name updated");
+                    }
+                  }}
+                  placeholder="Your name"
+                  style={{ flex: 1, padding: "8px 12px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Shown on the dashboard greeting and invoice messages.</div>
+              <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: theme.textSecondary, flexShrink: 0 }}>Payment Info</span>
+                <input
+                  type="text"
+                  defaultValue={store.settings?.paymentInfo || "PayNow to UEN 202410124E"}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    setStore((s) => ({ ...s, settings: { ...(s.settings || {}), paymentInfo: val } }));
+                    addToast("Payment info updated");
+                  }}
+                  placeholder="e.g. PayNow to UEN 123456789A"
+                  style={{ flex: 1, padding: "8px 12px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }}
+                />
+              </div>
+              <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: theme.textSecondary, flexShrink: 0 }}>Due Date</span>
+                <input
+                  type="text"
+                  defaultValue={store.settings?.paymentDeadline || "10th of each month"}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    setStore((s) => ({ ...s, settings: { ...(s.settings || {}), paymentDeadline: val } }));
+                    addToast("Payment deadline updated");
+                  }}
+                  placeholder="e.g. 10th of each month"
+                  style={{ flex: 1, padding: "8px 12px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Used in all WhatsApp invoice and reminder templates.</div>
+
+              {/* Accent colour picker — Premium */}
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid " + theme.border }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>ACCENT COLOUR</div>
+                  <PremiumBadge />
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                  {["#F59E0B","#EF4444","#10B981","#3B82F6","#8B5CF6","#EC4899","#F97316","#06B6D4","#84CC16","#FFFFFF"].map(col => (
+                    <button key={col} onClick={() => setStore(s => ({ ...s, settings: { ...(s.settings || {}), accentColor: col } }))} style={{ width: 28, height: 28, borderRadius: "50%", background: col, border: "3px solid " + ((store.settings?.accentColor || "#F59E0B") === col ? theme.text : "transparent"), cursor: "pointer", transition: "border 0.15s", flexShrink: 0 }} title={col} />
+                  ))}
+                  <label style={{ cursor: "pointer", position: "relative" }} title="Custom colour">
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)", border: "3px solid " + theme.border, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} />
+                    <input type="color" value={store.settings?.accentColor || "#F59E0B"} onChange={(e) => setStore(s => ({ ...s, settings: { ...(s.settings || {}), accentColor: e.target.value } }))} style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
+                  </label>
+                </div>
+                <div style={{ fontSize: 11, color: theme.textMuted }}>Changes the highlight colour throughout the app. Current: <span style={{ color: theme.accent, fontWeight: 700 }}>{store.settings?.accentColor || "#F59E0B"}</span></div>
+              </div>
+            </Card>
+
             {/* Export / Import */}
-            <Card style={{ marginTop: 16, padding: 14 }}>
+            <Card style={{ marginTop: 0, padding: 14 }}>
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>EXPORT</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
                   try {
-                    const wb = XLSX.utils.book_new();
-                    // Summary tab — all students overview
-                    const summaryData = store.students.map(s => {
-                      const lessons = store.lessons.filter(l => l.studentId === s.id);
-                      const completed = lessons.filter(l => l.status === "completed").length;
-                      const totalHours = lessons.filter(l => l.status !== "cancelled").reduce((sum, l) => sum + l.duration, 0) / 60;
-                      return { Name: s.name, Level: s.level, Stream: s.stream, Status: s.status, "Hourly Rate": s.hourlyRate, Parent: s.parent, Phone: s.parentPhone, Email: s.parentEmail, "Total Lessons": lessons.length, Completed: completed, "Total Hours": Math.round(totalHours * 100) / 100, "Total Fees": Math.round(s.hourlyRate * totalHours * 100) / 100, "Join Date": s.joinDate, Notes: s.notes || "" };
+                    const c = (v) => '"' + String(v || "").replace(/"/g, '""') + '"';
+                    const headers = ["Name","Level","Stream","Status","Hourly Rate","Parent","Phone","Email","Total Lessons","Total Hours","Total Fees","Join Date","Notes"];
+                    const rows = store.students.map(s => {
+                      const lessons = store.lessons.filter(l => l.studentId === s.id && l.status !== "cancelled");
+                      const totalHours = Math.round(lessons.reduce((sum, l) => sum + l.duration, 0) / 60 * 100) / 100;
+                      const totalFees = Math.round(s.hourlyRate * totalHours * 100) / 100;
+                      return [c(s.name),c(s.level),c(s.stream),c(s.status),s.hourlyRate,c(s.parent),c(s.parentPhone),c(s.parentEmail),lessons.length,totalHours,totalFees,c(s.joinDate),c(s.notes)].join(",");
                     });
-                    const summaryWs = XLSX.utils.json_to_sheet(summaryData);
-                    summaryWs["!cols"] = [{ wch: 20 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 30 }];
-                    XLSX.utils.book_append_sheet(wb, summaryWs, "All Students");
-                    // One tab per student with their lessons
-                    store.students.forEach(s => {
-                      const lessons = store.lessons.filter(l => l.studentId === s.id).sort((a, b) => new Date(a.date) - new Date(b.date));
-                      const lessonData = lessons.map(l => {
-                        const d = new Date(l.date);
-                        return { Date: d.toLocaleDateString("en-SG"), Time: d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }), Duration: l.duration + " min", Subject: l.subject, Status: l.status, Location: l.location, "Fee ($)": Math.round(s.hourlyRate * l.duration / 60 * 100) / 100, Feedback: l.comment || "" };
-                      });
-                      if (lessonData.length === 0) lessonData.push({ Date: "", Time: "", Duration: "", Subject: "No lessons", Status: "", Location: "", "Fee ($)": "", Feedback: "" });
-                      const ws = XLSX.utils.json_to_sheet(lessonData);
-                      ws["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 40 }];
-                      // Sanitize sheet name (max 31 chars, no special chars)
-                      const sheetName = s.name.replace(/[\\/*?[\]:]/g, "").substring(0, 31);
-                      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-                    });
-                    XLSX.writeFile(wb, "TutorPulse-Export-" + new Date().toISOString().split("T")[0] + ".xlsx");
-                    addToast("Excel exported (" + store.students.length + " students)");
-                  } catch (err) {
-                    addToast("Export failed: " + err.message, "error");
-                  }
-                }}>Export Excel</Button>
+                    const csv = [headers.join(","), ...rows].join("\n");
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url; a.download = "TutorPulse-" + new Date().toISOString().split("T")[0] + ".csv"; a.click();
+                    URL.revokeObjectURL(url);
+                    addToast("CSV exported (" + store.students.length + " students)");
+                  } catch (err) { addToast("Export failed: " + err.message, "error"); }
+                }}>Export CSV</Button>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
                   const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
                   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "tutorpulse-backup-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
@@ -1314,68 +1573,29 @@ export default function TutorPulse() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <Button size="sm" variant="secondary" icon="download" onClick={() => {
                   try {
-                    const wb = XLSX.utils.book_new();
-                    // Template with example row
-                    const data = [
-                      { Name: "John Tan", Level: "P5", Stream: "小学普华", Status: "active", "Hourly Rate": 70, Parent: "Mrs. Tan", Phone: "+65 91234567", Email: "tan@email.com", "Join Date": "2025-01-15", Notes: "Example — delete this row" },
-                    ];
-                    const ws = XLSX.utils.json_to_sheet(data);
-                    ws["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 12 }, { wch: 30 }];
-                    // Add data validation dropdowns
-                    const levelList = '"P1,P2,P3,P4,P5,P6,Sec 1,Sec 2,Sec 3,Sec 4,Sec 5,JC 1"';
-                    const streamList = '"小学普华,小学高华,G1华文,G2华文,G3华文,中学高华,H1华文"';
-                    const statusList = '"active,trial,paused"';
-                    // Apply validation to rows 2-100 (B=Level, C=Stream, D=Status)
-                    if (!ws["!dataValidation"]) ws["!dataValidation"] = [];
-                    for (let r = 1; r <= 100; r++) {
-                      ws["!dataValidation"].push({ sqref: "B" + (r + 1), type: "list", formula1: levelList });
-                      ws["!dataValidation"].push({ sqref: "C" + (r + 1), type: "list", formula1: streamList });
-                      ws["!dataValidation"].push({ sqref: "D" + (r + 1), type: "list", formula1: statusList });
-                    }
-                    // Also add a reference sheet with all valid values
-                    const refData = [];
-                    const levels = ["P1","P2","P3","P4","P5","P6","Sec 1","Sec 2","Sec 3","Sec 4","Sec 5","JC 1"];
-                    const streams = ["小学普华","小学高华","G1华文","G2华文","G3华文","中学高华","H1华文"];
-                    const statuses = ["active","trial","paused"];
-                    const maxLen = Math.max(levels.length, streams.length, statuses.length);
-                    for (let i = 0; i < maxLen; i++) {
-                      refData.push({ "Valid Levels": levels[i] || "", "Valid Streams": streams[i] || "", "Valid Statuses": statuses[i] || "" });
-                    }
-                    const refWs = XLSX.utils.json_to_sheet(refData);
-                    refWs["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 14 }];
-                    XLSX.utils.book_append_sheet(wb, ws, "Students");
-                    XLSX.utils.book_append_sheet(wb, refWs, "Valid Values");
-                    XLSX.writeFile(wb, "tutorpulse-student-template.xlsx");
+                    const csv = 'Name,Level,Stream,Status,Hourly Rate,Parent,Phone,Email,Join Date,Notes\n"John Tan","P5","小学普华","active",70,"Mrs. Tan","+65 91234567","tan@email.com","2025-01-15","Example — delete this row"';
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url; a.download = "tutorpulse-template.csv"; a.click();
+                    URL.revokeObjectURL(url);
                     addToast("Template downloaded");
                   } catch (err) { addToast("Template download failed", "error"); }
                 }}>Download Template</Button>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
-                  const input = document.createElement("input"); input.type = "file"; input.accept = ".csv,.xlsx,.xls";
+                  const input = document.createElement("input"); input.type = "file"; input.accept = ".csv";
                   input.onchange = (e) => {
                     const file = e.target.files[0]; if (!file) return;
                     const reader = new FileReader();
                     reader.onload = (ev) => {
                       try {
-                        let rows = [];
-                        if (file.name.endsWith(".csv")) {
-                          // CSV parse
-                          const lines = ev.target.result.split("\n").filter(l => l.trim());
-                          if (lines.length < 2) { addToast("File is empty", "error"); return; }
-                          for (let i = 1; i < lines.length; i++) {
-                            const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
-                            const clean = (s) => (s || "").replace(/^"|"$/g, "").replace(/""/g, '"').trim();
-                            if (cols.length >= 1 && clean(cols[0])) rows.push(cols.map(clean));
-                          }
-                        } else {
-                          // Excel parse
-                          const data = new Uint8Array(ev.target.result);
-                          const wb = XLSX.read(data, { type: "array" });
-                          const ws = wb.Sheets[wb.SheetNames[0]];
-                          const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
-                          for (let i = 1; i < jsonData.length; i++) {
-                            const r = jsonData[i];
-                            if (r && r.length >= 1 && String(r[0] || "").trim()) rows.push(r.map(c => String(c || "").trim()));
-                          }
+                        const lines = ev.target.result.split("\n").filter(l => l.trim());
+                        if (lines.length < 2) { addToast("File is empty", "error"); return; }
+                        const rows = [];
+                        for (let i = 1; i < lines.length; i++) {
+                          const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
+                          const clean = (s) => (s || "").replace(/^"|"$/g, "").replace(/""/g, '"').trim();
+                          if (cols.length >= 1 && clean(cols[0])) rows.push(cols.map(clean));
                         }
                         const newStudents = rows.map(cols => {
                           const name = cols[0] || "";
@@ -1388,10 +1608,10 @@ export default function TutorPulse() {
                         } else if (newStudents.length === 0) { addToast("No valid rows found", "error"); }
                       } catch (err) { addToast("Failed to read file: " + err.message, "error"); }
                     };
-                    if (file.name.endsWith(".csv")) { reader.readAsText(file); } else { reader.readAsArrayBuffer(file); }
+                    reader.readAsText(file);
                   };
                   input.click();
-                }}>Import Students</Button>
+                }}>Import CSV</Button>
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => {
                   const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
                   input.onchange = (e) => {
@@ -1463,28 +1683,6 @@ export default function TutorPulse() {
               })()}
             </Card>
 
-            {/* Profile Settings */}
-            <Card style={{ padding: 14 }}>
-              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>PROFILE</div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <span style={{ fontSize: 13, color: theme.textSecondary, flexShrink: 0 }}>Display Name</span>
-                <input
-                  type="text"
-                  defaultValue={store.settings?.tutorName || ""}
-                  onBlur={(e) => {
-                    const val = e.target.value.trim();
-                    if (val !== (store.settings?.tutorName || "")) {
-                      setStore((s) => ({ ...s, settings: { ...(s.settings || {}), tutorName: val } }));
-                      addToast("Name updated");
-                    }
-                  }}
-                  placeholder="Your name"
-                  style={{ flex: 1, padding: "8px 12px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }}
-                />
-              </div>
-              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Shown on the dashboard greeting and invoice messages.</div>
-            </Card>
-
             {/* Data Reset */}
             <Card style={{ padding: 14, borderColor: theme.danger + "44" }}>
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8 }}>DANGER ZONE</div>
@@ -1528,17 +1726,8 @@ export default function TutorPulse() {
   const [deletedLesson, setDeletedLesson] = useState(null);
   const [returnToStudentId, setReturnToStudentId] = useState(null);
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
-  const bulkDeleteIdsRef = useRef([]);
-  const [bulkDeleteCount, setBulkDeleteCount] = useState(0);
-  const toggleBulkId = (id) => {
-    const ids = bulkDeleteIdsRef.current;
-    if (ids.includes(id)) {
-      bulkDeleteIdsRef.current = ids.filter(x => x !== id);
-    } else {
-      bulkDeleteIdsRef.current = [...ids, id];
-    }
-    setBulkDeleteCount(bulkDeleteIdsRef.current.length);
-  };
+  const [bulkDeleteIds, setBulkDeleteIds] = useState([]);
+  const toggleBulkId = (id) => setBulkDeleteIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const startLessonEdit = () => {
     if (!selectedLesson) return;
@@ -1681,8 +1870,24 @@ export default function TutorPulse() {
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Select label="Duration" value={form.duration} onChange={(v) => updateForm("duration", v)} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }]} />
-          <Select label="Location" value={form.location} onChange={(v) => updateForm("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Duration</label>
+            <select value={form.duration === "30" || form.duration === "45" || form.duration === "60" || form.duration === "90" || form.duration === "120" ? form.duration : "other"} onChange={(e) => { if (e.target.value !== "other") updateForm("duration", e.target.value); else updateForm("duration", ""); }} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14, cursor: "pointer", appearance: "none", marginBottom: (form.duration !== "30" && form.duration !== "45" && form.duration !== "60" && form.duration !== "90" && form.duration !== "120") ? 8 : 0 }}>
+              {[{v:"30",l:"30 min"},{v:"45",l:"45 min"},{v:"60",l:"60 min"},{v:"90",l:"90 min"},{v:"120",l:"120 min"},{v:"other",l:"Other..."}].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+            {(form.duration !== "30" && form.duration !== "45" && form.duration !== "60" && form.duration !== "90" && form.duration !== "120") && (
+              <input type="number" min="1" max="480" value={form.duration} onChange={(e) => updateForm("duration", e.target.value)} placeholder="Enter minutes..." style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.accent + "88", borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+            )}
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Location</label>
+            <select value={["Home Studio","Online — Zoom","Student's Home"].includes(form.location) ? form.location : "__other__"} onChange={(e) => { if (e.target.value !== "__other__") updateForm("location", e.target.value); else updateForm("location", ""); }} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14, cursor: "pointer", appearance: "none", marginBottom: !["Home Studio","Online — Zoom","Student's Home"].includes(form.location) ? 8 : 0 }}>
+              {[{v:"Home Studio",l:"Home Studio"},{v:"Online — Zoom",l:"Online — Zoom"},{v:"Student's Home",l:"Student's Home"},{v:"__other__",l:"Other..."}].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+            {!["Home Studio","Online — Zoom","Student's Home"].includes(form.location) && (
+              <input type="text" value={form.location} onChange={(e) => updateForm("location", e.target.value)} placeholder="Enter custom location..." style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.accent + "88", borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+            )}
+          </div>
         </div>
         <Input label="Subject / Topic" value={form.subject} onChange={(v) => updateForm("subject", v)} placeholder="e.g., 华文 作文 练习" />
 
@@ -1766,7 +1971,7 @@ export default function TutorPulse() {
 
       const monthLessons = store.lessons.filter((l) => {
         const d = new Date(l.date);
-        return l.studentId === sid && d.getMonth() === currentMonth && d.getFullYear() === currentYear && l.status !== "cancelled";
+        return l.studentId === sid && d.getMonth() === currentMonth && d.getFullYear() === currentYear && l.status !== "cancelled" && !l.excludeFromBilling;
       }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
       const totalSessions = monthLessons.length;
@@ -1801,7 +2006,7 @@ export default function TutorPulse() {
     // ── Template generators ──────────────────────────────────
     const templateDefs = useMemo(() => [
       {
-        id: "invoice", label: "\uD83E\uDDFE Fee Invoice + AI Summary", icon: "dollar",
+        id: "invoice", label: "🧾 Fee Invoice + AI Summary", icon: "dollar", premium: true,
         desc: "AI progress summary + lesson dates + fee breakdown",
         async: true,
         generate: (sid) => {
@@ -1827,7 +2032,7 @@ export default function TutorPulse() {
           msg += "  " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr\n";
           msg += "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
           msg += "  *Total Due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
-          msg += "\uD83D\uDCB3 *Payment:* PayNow to UEN 202410124E\nPlease pay by the 10th. Thank you! \uD83D\uDE4F\n\n\u2014 Teacher Leon";
+          msg += "\uD83D\uDCB3 *Payment:* " + paymentInfo + "\nPlease pay by the " + paymentDeadline + ". Thank you! \uD83D\uDE4F\n\n\u2014 Teacher Leon";
           return msg;
         },
         buildAIPrompt: (sid) => {
@@ -1861,7 +2066,7 @@ export default function TutorPulse() {
           msg += "  " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr\n";
           msg += "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
           msg += "  *Total Due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
-          msg += "\uD83D\uDCB3 *Payment:* PayNow to UEN 202410124E\nPlease pay by the 10th. Thank you! \uD83D\uDE4F\n\n\u2014 Teacher Leon";
+          msg += "\uD83D\uDCB3 *Payment:* " + paymentInfo + "\nPlease pay by the " + paymentDeadline + ". Thank you! \uD83D\uDE4F\n\n\u2014 Teacher Leon";
           return msg;
         },
       },
@@ -1875,7 +2080,7 @@ export default function TutorPulse() {
           msg += "Friendly reminder that " + inv.student.name + "'s *" + inv.monthName + "* tuition fee is due:\n\n";
           msg += "\uD83D\uDCDA " + inv.totalSessions + " lessons (" + inv.totalHours + "h total)\n";
           msg += "\uD83D\uDCB0 *Amount: $" + inv.finalAmount.toFixed(2) + "*\n";
-          msg += "\uD83D\uDCB3 PayNow to UEN 202410124E\n\n";
+          msg += "\uD83D\uDCB3 " + paymentInfo + "\n\n";
           msg += "Ignore this if already paid! Thank you \uD83D\uDE4F\n\u2014 Teacher Leon";
           return msg;
         },
@@ -1891,7 +2096,7 @@ export default function TutorPulse() {
           msg += "*Details:*\n";
           msg += "  " + inv.totalSessions + " sessions (" + inv.totalHours + "h) \u2014 " + inv.student.level + " " + inv.student.stream + "\n";
           msg += "  *Amount due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
-          msg += "Kindly arrange payment via PayNow to UEN 202410124E at your earliest convenience.\n\nThank you for your understanding \uD83D\uDE4F\n\u2014 Teacher Leon";
+          msg += "Kindly arrange payment via " + paymentInfo + " at your earliest convenience.\n\nThank you for your understanding \uD83D\uDE4F\n\u2014 Teacher " + (store.settings?.tutorName || "Leon");
           return msg;
         },
       },
@@ -1918,7 +2123,139 @@ export default function TutorPulse() {
           return msg;
         },
       },
-    ], [buildStudentInvoice, store.lessons]);
+      {
+        id: "homework", label: "📝 Homework This Month", icon: "book",
+        desc: "List of homework assigned across all lessons this month",
+        generate: (sid) => {
+          const inv = buildStudentInvoice(sid);
+          if (!inv) return "";
+          const now = new Date();
+          const allLessons = store.lessons.filter(l => {
+            const d = new Date(l.date);
+            return l.studentId === sid && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && l.homework;
+          }).sort((a, b) => new Date(a.date) - new Date(b.date));
+          let msg = "Hi " + inv.student.parent + ",
+
+";
+          msg += "Here is a summary of homework assigned to " + inv.student.name + " in *" + inv.monthName + "*:
+
+";
+          if (allLessons.length > 0) {
+            allLessons.forEach(l => {
+              const d = new Date(l.date);
+              const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
+              msg += "📖 *" + dayStr + "* (" + l.subject + ")
+   " + l.homework + "
+
+";
+            });
+          } else {
+            msg += "(No homework recorded this month)
+
+";
+          }
+          msg += "Please ensure " + inv.student.name + " completes the tasks before the next lesson. Thank you! 🙏
+— Teacher " + (store.settings?.tutorName || "Leon");
+          return msg;
+        },
+      },
+      {
+        id: "progress", label: "📊 Progress Summary", icon: "star", premium: true,
+        desc: "Monthly progress update without fee details",
+        async: true,
+        generate: (sid) => {
+          const inv = buildStudentInvoice(sid);
+          if (!inv) return "";
+          let msg = "Hi " + inv.student.parent + ",
+
+";
+          msg += "Here is a progress update for " + inv.student.name + " for *" + inv.monthName + "*:
+
+";
+          msg += "[AI_SUMMARY_PLACEHOLDER]
+
+";
+          msg += "We completed *" + inv.totalSessions + " sessions* (" + inv.totalHours + "h) this month.
+
+";
+          msg += "Please feel free to reach out if you have any questions! 🙏
+— Teacher " + (store.settings?.tutorName || "Leon");
+          return msg;
+        },
+        buildAIPrompt: (sid) => {
+          const inv = buildStudentInvoice(sid);
+          if (!inv) return null;
+          const feedbackNotes = inv.monthLessons.filter(l => l.comment).map(l => l.subject + ": " + l.comment);
+          if (feedbackNotes.length === 0) return null;
+          return "You are Teacher " + (store.settings?.tutorName || "Leon") + ", a Chinese language tutor in Singapore. Based on these session notes for " + inv.student.name + " (" + inv.student.level + " " + inv.student.stream + ") this month, write a warm 3-4 sentence progress summary for their parent. Mention specific strengths, areas to improve, and encouragement. Notes:
+" + feedbackNotes.join("
+") + "
+
+Just the summary paragraph, no greeting or sign-off. Keep under 80 words.";
+        },
+      },
+      {
+        id: "discipline", label: "⚠️ Discipline Notice", icon: "zap",
+        desc: "Raise a concern about behaviour or attitude",
+        async: true,
+        generate: (sid) => {
+          const inv = buildStudentInvoice(sid);
+          if (!inv) return "";
+          let msg = "Hi " + inv.student.parent + ",
+
+";
+          msg += "I hope you are well. I would like to bring something to your attention regarding " + inv.student.name + "'s recent lessons.
+
+";
+          msg += "[AI_SUMMARY_PLACEHOLDER]
+
+";
+          msg += "I believe with your support at home, " + inv.student.name + " can make great progress. I am happy to discuss this further at your convenience.
+
+Thank you for your understanding 🙏
+— Teacher " + (store.settings?.tutorName || "Leon");
+          return msg;
+        },
+        buildAIPrompt: (sid) => {
+          const inv = buildStudentInvoice(sid);
+          if (!inv) return null;
+          const disciplineNotes = inv.monthLessons.filter(l => l.comment).map(l => l.subject + ": " + l.comment);
+          const prompt = "You are Teacher " + (store.settings?.tutorName || "Leon") + ", a Chinese language tutor in Singapore. Write a gentle but clear 2-3 sentence discipline concern message for the parent of " + inv.student.name + " (" + inv.student.level + "). Be professional, specific about the behaviour concern, and constructive. " + (disciplineNotes.length > 0 ? "Session notes: " + disciplineNotes.join("; ") : "Mention general attitude, focus or effort concerns.") + "
+
+Just the concern paragraph, no greeting or sign-off. Keep under 60 words.";
+          return prompt;
+        },
+      },
+      {
+        id: "termination", label: "🚪 Termination Notice", icon: "x",
+        desc: "Politely end the tutoring arrangement",
+        generate: (sid) => {
+          const inv = buildStudentInvoice(sid);
+          if (!inv) return "";
+          const now = new Date();
+          const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleDateString("en-SG", { month: "long", year: "numeric" });
+          let msg = "Hi " + inv.student.parent + ",
+
+";
+          msg += "I hope this message finds you well. After careful consideration, I would like to inform you that I will be ending my tutoring arrangement with " + inv.student.name + " effective end of " + now.toLocaleDateString("en-SG", { month: "long", year: "numeric" }) + ".
+
+";
+          msg += "It has been a privilege working with " + inv.student.name + " and I am grateful for the trust you have placed in me. I wish " + inv.student.name + " all the very best in their studies ahead.
+
+";
+          if (inv.totalSessions > 0) {
+            msg += "Outstanding fees for " + inv.monthName + ": *$" + inv.finalAmount.toFixed(2) + "*
+" + paymentInfo + "
+
+";
+          }
+          msg += "Please do not hesitate to reach out if you need anything. Thank you for your understanding.
+
+🙏 Teacher " + (store.settings?.tutorName || "Leon");
+          return msg;
+        },
+      },
+    ], [buildStudentInvoice, store.lessons, paymentInfo, store.settings]);
 
     // Build list of recipients for bulk mode
     const bulkRecipients = useMemo(() => {
@@ -1996,8 +2333,8 @@ export default function TutorPulse() {
           }
         }
         const prompt = isBulk
-          ? "Generate a polite WhatsApp fee collection message for March 2026 with [Student Name] and [Amount] placeholders. Payment via PayNow to UEN 202410124E. Sign off as Teacher Leon. Under 100 words. Just the message."
-          : "Generate a polite WhatsApp fee message using this data: " + aiContext + ". Include lesson dates, session feedback notes if available, fee breakdown, total due. Payment via PayNow to UEN 202410124E. Sign off as Teacher Leon. Just the message, no preamble.";
+          ? "Generate a polite WhatsApp fee collection message for March 2026 with [Student Name] and [Amount] placeholders. Payment via " + paymentInfo + ". Sign off as Teacher " + (store.settings?.tutorName || "Leon") + ". Under 100 words. Just the message."
+          : "Generate a polite WhatsApp fee message using this data: " + aiContext + ". Include lesson dates, session feedback notes if available, fee breakdown, total due. Payment via " + paymentInfo + ". Sign off as Teacher " + (store.settings?.tutorName || "Leon") + ". Just the message, no preamble.";
         const response = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2020,14 +2357,6 @@ export default function TutorPulse() {
 
     return (
       <Modal open={!!showMessageCompose} onClose={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setActiveTemplate(null); }} title={isBulk ? "Fee Reminders via WhatsApp" : "WhatsApp " + (student ? student.parent : "")} width={540}>
-
-        {/* WhatsApp banner */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 12, background: "rgba(37, 211, 102, 0.08)", borderRadius: 12, marginBottom: 16, border: "1px solid rgba(37, 211, 102, 0.2)" }}>
-          <WAIcon />
-          <div style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 1.5 }}>
-            {isBulk ? "Each message is auto-personalized per student with their actual lesson dates and fees." : "Opens WhatsApp with " + (student ? student.parent + "'s number pre-filled." : "the parent's number.")}
-          </div>
-        </div>
 
         {/* Single: parent card */}
         {!isBulk && student && (
@@ -2065,7 +2394,10 @@ export default function TutorPulse() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
             {templateDefs.map((tpl) => (
               <button key={tpl.id} onClick={() => applyTemplate(tpl.id)} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 10, border: "1px solid " + (activeTemplate === tpl.id ? theme.accent + "88" : theme.border), background: activeTemplate === tpl.id ? theme.accentBg : theme.bgElevated, cursor: "pointer", transition: "all 0.15s", fontFamily: "'DM Sans', sans-serif" }} onMouseEnter={(e) => { if (activeTemplate !== tpl.id) e.currentTarget.style.borderColor = theme.borderLight; }} onMouseLeave={(e) => { if (activeTemplate !== tpl.id) e.currentTarget.style.borderColor = theme.border; }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: activeTemplate === tpl.id ? theme.accent : theme.text, marginBottom: 2 }}>{tpl.label}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: activeTemplate === tpl.id ? theme.accent : theme.text }}>{tpl.label}</span>
+                  {tpl.premium && <PremiumBadge />}
+                </div>
                 <div style={{ fontSize: 10, color: theme.textMuted, lineHeight: 1.3 }}>{tpl.desc}</div>
               </button>
             ))}
@@ -2151,6 +2483,10 @@ export default function TutorPulse() {
           )}
           <Button variant="secondary" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setActiveTemplate(null); }}>Cancel</Button>
         </div>
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 6, color: theme.textMuted, fontSize: 11 }}>
+          <WAIcon size={13} />
+          <span>{isBulk ? "Each message is auto-personalized with the student's actual lesson dates and fees." : "Opens WhatsApp with " + (student ? student.parent + "'s number pre-filled." : "the parent's number pre-filled.")}</span>
+        </div>
       </Modal>
     );
   };
@@ -2170,19 +2506,46 @@ export default function TutorPulse() {
       <Modal open={showAI} onClose={() => { setShowAI(false); setAiResult(""); }} title="TutorPulse AI" width={540}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 14, background: theme.purpleBg, borderRadius: 12, marginBottom: 16, border: `1px solid ${theme.purple}33` }}>
           <Icon name="ai" size={24} color={theme.purple} />
-          <div style={{ fontSize: 13, color: theme.textSecondary }}>AI assistant powered by Claude — ask about scheduling, fees, lesson plans, or student progress.</div>
+          <div style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>AI assistant powered by Claude — ask about scheduling, fees, lesson plans, or student progress.</div>
+          <PremiumBadge />
         </div>
 
         {!aiResult && !aiLoading && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>SUGGESTIONS</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {suggestions.map((s, i) => (
-                <button key={i} onClick={() => { setPrompt(s); callAI(s); }} style={{ textAlign: "left", padding: "10px 14px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "transparent", color: theme.textSecondary, fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.background = theme.bgElevated; e.currentTarget.style.borderColor = theme.borderLight; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = theme.border; }}>
-                  {s}
-                </button>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>{showAIHistory ? "HISTORY" : "SUGGESTIONS"}</div>
+              {aiHistory.length > 0 && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setShowAIHistory(h => !h)} style={{ fontSize: 11, color: theme.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>{showAIHistory ? "← Suggestions" : "History (" + aiHistory.length + ")"}</button>
+                  {showAIHistory && <button onClick={() => { setAiHistory([]); localStorage.removeItem("tutorpulse-ai-history"); }} style={{ fontSize: 11, color: theme.danger, background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Clear all</button>}
+                </div>
+              )}
             </div>
+            {showAIHistory ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflow: "auto" }}>
+                {aiHistory.map((h) => (
+                  <div key={h.id} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid " + theme.border, background: theme.bgElevated }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: theme.text, flex: 1, marginRight: 8 }}>{h.prompt}</div>
+                      <button onClick={() => { setAiHistory(prev => { const next = prev.filter(x => x.id !== h.id); try { localStorage.setItem("tutorpulse-ai-history", JSON.stringify(next)); } catch {} return next; }); }} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted, padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                    </div>
+                    <div style={{ fontSize: 11, color: theme.textSecondary, lineHeight: 1.4, marginBottom: 6 }}>{stripMarkdown(h.result).substring(0, 120)}...</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => { setPrompt(h.prompt); setAiResult(h.result); setShowAIHistory(false); }} style={{ fontSize: 11, color: theme.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>View</button>
+                      <button onClick={() => { setPrompt(h.prompt); callAI(h.prompt); setShowAIHistory(false); }} style={{ fontSize: 11, color: theme.textMuted, background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Re-ask</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {suggestions.map((s, i) => (
+                  <button key={i} onClick={() => { setPrompt(s); callAI(s); }} style={{ textAlign: "left", padding: "10px 14px", borderRadius: 10, border: `1px solid ${theme.border}`, background: "transparent", color: theme.textSecondary, fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.background = theme.bgElevated; e.currentTarget.style.borderColor = theme.borderLight; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = theme.border; }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -2196,11 +2559,14 @@ export default function TutorPulse() {
 
         {aiResult && (
           <div style={{ padding: 16, background: theme.bgElevated, borderRadius: 12, marginBottom: 16, fontSize: 13, lineHeight: 1.7, color: theme.textSecondary, whiteSpace: "pre-wrap", maxHeight: 300, overflow: "auto", border: `1px solid ${theme.border}` }}>
-            {aiResult}
+            {stripMarkdown(aiResult)}
           </div>
         )}
 
         <div style={{ display: "flex", gap: 8 }}>
+          {aiResult && (
+            <Button size="sm" variant="secondary" icon="arrowLeft" onClick={() => { setAiResult(""); setPrompt(""); }}>Reset</Button>
+          )}
           <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Ask TutorPulse AI anything..." style={{ flex: 1, padding: "10px 14px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13 }} onKeyDown={(e) => { if (e.key === "Enter" && prompt.trim()) callAI(prompt); }} />
           <Button size="sm" icon="send" onClick={() => { if (prompt.trim()) callAI(prompt); }} disabled={aiLoading || !prompt.trim()}>Ask</Button>
         </div>
@@ -2231,7 +2597,7 @@ export default function TutorPulse() {
   // ═══════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════
-  const pages = { home: HomePage, schedule: SchedulePage, students: StudentsPage, payments: PaymentsPage, admin: AdminPage };
+  const pages = { home: HomePage, schedule: SchedulePage, students: StudentsPage, payments: PaymentsPage, messages: MessagesPage, admin: AdminPage };
   const PageComponent = pages[page];
 
   // Loading screen while persistence loads
@@ -2283,15 +2649,21 @@ export default function TutorPulse() {
 
       {/* Bottom Navigation */}
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, padding: "8px 12px 12px", background: "rgba(10, 14, 23, 0.95)", backdropFilter: "blur(16px)", borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", zIndex: 100 }}>
-        {navItems.map((item) => (
-          <button key={item.id} onClick={() => setPage(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "6px 12px", background: "none", border: "none", cursor: "pointer", transition: "all 0.2s", borderRadius: 12 }}>
-            <Icon name={item.icon} size={20} color={page === item.id ? theme.accent : theme.textMuted} />
-            <span style={{ fontSize: 10, fontWeight: page === item.id ? 700 : 500, color: page === item.id ? theme.accent : theme.textMuted, letterSpacing: 0.3 }}>
-              {item.label}
-            </span>
-            {page === item.id && <div style={{ width: 4, height: 4, borderRadius: 2, background: theme.accent, marginTop: -1 }} />}
-          </button>
-        ))}
+        {navItems.map((item) => {
+          const unreadMsgs = item.id === "messages" ? store.messages.filter(m => m.direction === "in" && !m.read).length : 0;
+          return (
+            <button key={item.id} onClick={() => setPage(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 6px", background: "none", border: "none", cursor: "pointer", transition: "all 0.2s", borderRadius: 10, flex: 1, position: "relative" }}>
+              <div style={{ position: "relative" }}>
+                <Icon name={item.icon} size={18} color={page === item.id ? theme.accent : theme.textMuted} />
+                {unreadMsgs > 0 && <span style={{ position: "absolute", top: -4, right: -6, width: 14, height: 14, borderRadius: 7, background: theme.danger, color: "white", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{unreadMsgs}</span>}
+              </div>
+              <span style={{ fontSize: 9, fontWeight: page === item.id ? 700 : 500, color: page === item.id ? theme.accent : theme.textMuted, letterSpacing: 0.2, whiteSpace: "nowrap" }}>
+                {item.label}
+              </span>
+              {page === item.id && <div style={{ width: 3, height: 3, borderRadius: 2, background: theme.accent, marginTop: -1 }} />}
+            </button>
+          );
+        })}
       </div>
 
       {/* Toasts */}
@@ -2346,8 +2718,24 @@ export default function TutorPulse() {
                 <Input label="Time" type="time" value={lessonEdit.time} onChange={(v) => le("time", v)} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <Select label="Duration" value={lessonEdit.duration} onChange={(v) => le("duration", v)} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }, { value: "150", label: "150 min" }, { value: "180", label: "180 min" }]} />
-                <Select label="Location" value={lessonEdit.location} onChange={(v) => le("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Duration</label>
+                  <select value={["30","45","60","90","120"].includes(lessonEdit.duration) ? lessonEdit.duration : "other"} onChange={(e) => { if (e.target.value !== "other") le("duration", e.target.value); else le("duration", ""); }} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14, cursor: "pointer", appearance: "none", marginBottom: !["30","45","60","90","120"].includes(lessonEdit.duration) ? 8 : 0 }}>
+                    {[{v:"30",l:"30 min"},{v:"45",l:"45 min"},{v:"60",l:"60 min"},{v:"90",l:"90 min"},{v:"120",l:"120 min"},{v:"other",l:"Other..."}].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                  </select>
+                  {!["30","45","60","90","120"].includes(lessonEdit.duration) && (
+                    <input type="number" min="1" max="480" value={lessonEdit.duration} onChange={(e) => le("duration", e.target.value)} placeholder="Enter minutes..." style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.accent + "88", borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+                  )}
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Location</label>
+                  <select value={["Home Studio","Online — Zoom","Student's Home"].includes(lessonEdit.location) ? lessonEdit.location : "__other__"} onChange={(e) => { if (e.target.value !== "__other__") le("location", e.target.value); else le("location", ""); }} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14, cursor: "pointer", appearance: "none", marginBottom: !["Home Studio","Online — Zoom","Student's Home"].includes(lessonEdit.location) ? 8 : 0 }}>
+                    {[{v:"Home Studio",l:"Home Studio"},{v:"Online — Zoom",l:"Online — Zoom"},{v:"Student's Home",l:"Student's Home"},{v:"__other__",l:"Other..."}].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                  </select>
+                  {!["Home Studio","Online — Zoom","Student's Home"].includes(lessonEdit.location) && (
+                    <input type="text" value={lessonEdit.location} onChange={(e) => le("location", e.target.value)} placeholder="Enter custom location..." style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.accent + "88", borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+                  )}
+                </div>
               </div>
               <Input label="Subject / Topic" value={lessonEdit.subject} onChange={(v) => le("subject", v)} />
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
@@ -2449,22 +2837,22 @@ export default function TutorPulse() {
       {selectedStudent && (() => {
         const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
         const startEdit = () => {
-          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status });
+          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status, billingMode: selectedStudent.billingMode || "monthly" });
           setEditingStudent(true);
         };
         const saveEdit = () => {
-          const u = { name: studentEditForm.name, level: studentEditForm.level, stream: studentEditForm.stream, parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+          const u = { name: studentEditForm.name, level: studentEditForm.level, stream: studentEditForm.stream, parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, billingMode: studentEditForm.billingMode || "monthly", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
           updateStudent(selectedStudent.id, u); setSelectedStudent({ ...selectedStudent, ...u }); setEditingStudent(false); addToast("Student updated");
         };
         const uf = (k, v) => setStudentEditForm((f) => ({ ...f, [k]: v }));
         return (
-          <Modal open={!!selectedStudent} onClose={() => { setSelectedStudent(null); setEditingStudent(false); setBulkDeleteMode(false); }} title={editingStudent ? "Edit Student" : "Student Profile"} width={520}>
+          <Modal open={!!selectedStudent} onClose={() => { setSelectedStudent(null); setEditingStudent(false); setBulkDeleteMode(false); setBulkDeleteIds([]); }} title={editingStudent ? "Edit Student" : "Student Profile"} width={520}>
             {!editingStudent ? (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid " + theme.border }}>
                   <Avatar initials={selectedStudent.avatar} size={56} color={getStatusColor(selectedStudent.status)} />
                   <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 18, fontFamily: "'Playfair Display', serif" }}>{selectedStudent.name}</div><div style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>{selectedStudent.level} · {selectedStudent.stream}</div><Badge text={selectedStudent.status} color={getStatusColor(selectedStudent.status)} bg={getStatusBg(selectedStudent.status)} /></div>
-                  <div style={{ textAlign: "right" }}><div style={{ fontSize: 24, fontWeight: 700, color: theme.accent, fontFamily: "'Playfair Display', serif" }}>${selectedStudent.hourlyRate}</div><div style={{ fontSize: 11, color: theme.textMuted }}>per hour</div></div>
+                  <div style={{ textAlign: "right" }}><div style={{ fontSize: 24, fontWeight: 700, color: theme.accent, fontFamily: "'Playfair Display', serif" }}>${selectedStudent.hourlyRate}</div><div style={{ fontSize: 11, color: theme.textMuted }}>per hour</div><div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2 }}>{(selectedStudent.billingMode || "monthly") === "per-lesson" ? "Per-lesson" : "Monthly"}</div></div>
                 </div>
                 <Card style={{ marginBottom: 12, padding: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>PARENT / GUARDIAN</div><button onClick={startEdit} style={{ background: "none", border: "none", cursor: "pointer", color: theme.accent, fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 3 }}><Icon name="edit" size={12} color={theme.accent} /> Edit</button></div>
@@ -2473,14 +2861,80 @@ export default function TutorPulse() {
                   <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentEmail}</div>
                 </Card>
                 {selectedStudent.notes && (<Card style={{ marginBottom: 12, padding: 14, borderLeft: "3px solid " + theme.accent }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>NOTES</div><div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.notes}</div></Card>)}
+                {/* Grade Tracking — Premium */}
+                {(() => {
+                  const grades = selectedStudent.grades || [];
+                  const [showAddGrade, setShowAddGrade] = useState(false);
+                  const [gradeForm, setGradeForm] = useState({ subject: "", type: "start", date: new Date().toISOString().split("T")[0], score: "", note: "" });
+                  const saveGrade = () => {
+                    if (!gradeForm.subject || !gradeForm.score) return;
+                    const newGrade = { id: genId(), ...gradeForm };
+                    updateStudent(selectedStudent.id, { grades: [...grades, newGrade] });
+                    setSelectedStudent(s => ({ ...s, grades: [...(s.grades || []), newGrade] }));
+                    setGradeForm({ subject: "", type: "start", date: new Date().toISOString().split("T")[0], score: "", note: "" });
+                    setShowAddGrade(false);
+                    addToast("Grade saved");
+                  };
+                  const deleteGrade = (id) => {
+                    const next = grades.filter(g => g.id !== id);
+                    updateStudent(selectedStudent.id, { grades: next });
+                    setSelectedStudent(s => ({ ...s, grades: next }));
+                  };
+                  const bySubject = grades.reduce((acc, g) => { (acc[g.subject] = acc[g.subject] || []).push(g); return acc; }, {});
+                  const typeLabel = { start: "Starting", mid: "Mid-point", final: "Final/Grad" };
+                  const typeColor = { start: theme.info, mid: theme.warning, final: theme.success };
+                  return (
+                    <Card style={{ marginBottom: 12, padding: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>GRADE TRACKING</div><PremiumBadge /></div>
+                        <button onClick={() => setShowAddGrade(s => !s)} style={{ fontSize: 11, color: theme.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>{showAddGrade ? "Cancel" : "+ Add Grade"}</button>
+                      </div>
+                      {showAddGrade && (
+                        <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, marginBottom: 12, border: "1px solid " + theme.border }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                            <input value={gradeForm.subject} onChange={e => setGradeForm(f => ({ ...f, subject: e.target.value }))} placeholder="Subject (e.g. Chinese)" style={{ padding: "8px 10px", background: theme.bgCard, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 12, outline: "none", fontFamily: "'DM Sans', sans-serif" }} />
+                            <select value={gradeForm.type} onChange={e => setGradeForm(f => ({ ...f, type: e.target.value }))} style={{ padding: "8px 10px", background: theme.bgCard, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 12, outline: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                              <option value="start">Starting Grade</option>
+                              <option value="mid">Mid-point (CA1/SA1…)</option>
+                              <option value="final">Final / Graduation</option>
+                            </select>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                            <input type="date" value={gradeForm.date} onChange={e => setGradeForm(f => ({ ...f, date: e.target.value }))} style={{ padding: "8px 10px", background: theme.bgCard, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 12, outline: "none", fontFamily: "'DM Sans', sans-serif" }} />
+                            <input value={gradeForm.score} onChange={e => setGradeForm(f => ({ ...f, score: e.target.value }))} placeholder="Score / Grade (e.g. B+, 78)" style={{ padding: "8px 10px", background: theme.bgCard, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 12, outline: "none", fontFamily: "'DM Sans', sans-serif" }} />
+                          </div>
+                          <input value={gradeForm.note} onChange={e => setGradeForm(f => ({ ...f, note: e.target.value }))} placeholder="Notes (optional)" style={{ width: "100%", padding: "8px 10px", background: theme.bgCard, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 12, outline: "none", fontFamily: "'DM Sans', sans-serif", marginBottom: 8, boxSizing: "border-box" }} />
+                          <Button size="sm" onClick={saveGrade}>Save Grade</Button>
+                        </div>
+                      )}
+                      {Object.keys(bySubject).length === 0 && !showAddGrade && <div style={{ fontSize: 12, color: theme.textMuted, textAlign: "center", padding: "8px 0" }}>No grades recorded yet</div>}
+                      {Object.entries(bySubject).map(([subject, entries]) => (
+                        <div key={subject} style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: theme.text, marginBottom: 6 }}>{subject}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {entries.sort((a, b) => new Date(a.date) - new Date(b.date)).map(g => (
+                              <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: theme.bgInput, borderRadius: 8 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: typeColor[g.type], background: typeColor[g.type] + "22", padding: "2px 6px", borderRadius: 6 }}>{typeLabel[g.type]}</span>
+                                <span style={{ fontSize: 12, color: theme.textSecondary, flex: 1 }}>{new Date(g.date).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                <span style={{ fontSize: 14, fontWeight: 700, color: theme.text }}>{g.score}</span>
+                                {g.note && <span style={{ fontSize: 11, color: theme.textMuted }}>· {g.note}</span>}
+                                <button onClick={() => deleteGrade(g.id)} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted, fontSize: 14, padding: 0 }}>×</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </Card>
+                  );
+                })()}
               </>
             ) : (
               <>
                 <Input label="Student Name" value={studentEditForm.name} onChange={(v) => uf("name", v)} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Select label="Level" value={studentEditForm.level} onChange={(v) => uf("level", v)} options={LEVEL_OPTIONS} /><Select label="Stream" value={studentEditForm.stream} onChange={(v) => uf("stream", v)} options={STREAM_OPTIONS} /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><LevelStreamSelect label="Level" value={studentEditForm.level} onChange={(v) => uf("level", v)} options={LEVEL_OPTIONS} /><LevelStreamSelect label="Stream" value={studentEditForm.stream} onChange={(v) => uf("stream", v)} options={STREAM_OPTIONS} /></div>
                 <Input label="Parent Name" value={studentEditForm.parent} onChange={(v) => uf("parent", v)} />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Phone" value={studentEditForm.parentPhone} onChange={(v) => uf("parentPhone", v)} /><Input label="Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} /></div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }]} /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }, { value: "graduated", label: "Graduated 🎓" }]} /></div>
                 <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
                 <Input label="Notes" value={studentEditForm.notes} onChange={(v) => uf("notes", v)} multiline />
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}><Button size="sm" icon="check" onClick={saveEdit}>Save Changes</Button><Button size="sm" variant="secondary" onClick={() => setEditingStudent(false)}>Cancel</Button></div>
@@ -2490,27 +2944,27 @@ export default function TutorPulse() {
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>LESSONS ({studentLessons.length})</div>
-                {studentLessons.length > 0 && (<button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); bulkDeleteIdsRef.current = []; setBulkDeleteCount(0); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{bulkDeleteMode ? "Done" : "Bulk Delete"}</button>)}
+                {studentLessons.length > 0 && (<button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); setBulkDeleteIds([]); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{bulkDeleteMode ? "Done" : "Bulk Delete"}</button>)}
               </div>
-              {bulkDeleteMode && (
-                <div id="bulk-bar" style={{ display: bulkDeleteCount > 0 ? "flex" : "none", gap: 8, alignItems: "center", marginBottom: 10, padding: "8px 12px", background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "44", position: "sticky", top: 0, zIndex: 2 }}>
-                  <span id="bulk-count" style={{ fontSize: 12, color: theme.danger, fontWeight: 600, flex: 1 }}>{bulkDeleteCount} selected</span>
-                  <button onClick={() => { bulkDeleteIdsRef.current = studentLessons.map(l => l.id); setBulkDeleteCount(studentLessons.length); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>Select All</button>
-                  <button onClick={() => { const ids = bulkDeleteIdsRef.current; if (window.confirm("Delete " + ids.length + " lessons?")) { setStore((s) => ({ ...s, lessons: s.lessons.filter(l => !ids.includes(l.id)) })); addToast(ids.length + " lessons deleted"); bulkDeleteIdsRef.current = []; setBulkDeleteCount(0); setBulkDeleteMode(false); } }} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: theme.danger, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Delete</button>
+              {bulkDeleteMode && bulkDeleteIds.length > 0 && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, padding: "8px 12px", background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "44", position: "sticky", top: 0, zIndex: 2 }}>
+                  <span style={{ fontSize: 12, color: theme.danger, fontWeight: 600, flex: 1 }}>{bulkDeleteIds.length} selected</span>
+                  <button onClick={() => setBulkDeleteIds(studentLessons.map(l => l.id))} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>Select All</button>
+                  <button onClick={() => { if (window.confirm("Delete " + bulkDeleteIds.length + " lessons?")) { setStore((s) => ({ ...s, lessons: s.lessons.filter(l => !bulkDeleteIds.includes(l.id)) })); addToast(bulkDeleteIds.length + " lessons deleted"); setBulkDeleteIds([]); setBulkDeleteMode(false); } }} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: theme.danger, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Delete</button>
                 </div>
               )}
               {studentLessons.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, padding: "8px 0" }}>No lessons yet</div>}
               {studentLessons.map((l) => (
                 <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border, cursor: "pointer", display: "flex", gap: 10, alignItems: "flex-start" }} onClick={(e) => {
                   if (bulkDeleteMode) {
-                    const ids = bulkDeleteIdsRef.current; const isSelected = ids.includes(l.id);
-                    bulkDeleteIdsRef.current = isSelected ? ids.filter(x => x !== l.id) : [...ids, l.id];
-                    const cb = e.currentTarget.querySelector("[data-cb]");
-                    if (cb) { const now = !isSelected; cb.style.borderColor = now ? theme.danger : theme.borderLight; cb.style.background = now ? theme.danger : "transparent"; cb.innerHTML = now ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''; }
-                    const countEl = document.getElementById("bulk-count"); const count = bulkDeleteIdsRef.current.length; if (countEl) countEl.textContent = count + " selected"; const bar = document.getElementById("bulk-bar"); if (bar) bar.style.display = count > 0 ? "flex" : "none";
+                    toggleBulkId(l.id);
                   } else { setReturnToStudentId(selectedStudent.id); setSelectedStudent(null); setSelectedLesson(l); setLessonComment(l.comment || ""); }
                 }}>
-                  {bulkDeleteMode && (<div data-cb="1" style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + theme.borderLight, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}></div>)}
+                  {bulkDeleteMode && (
+                    <div style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (bulkDeleteIds.includes(l.id) ? theme.danger : theme.borderLight), background: bulkDeleteIds.includes(l.id) ? theme.danger : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4, transition: "all 0.15s" }}>
+                      {bulkDeleteIds.includes(l.id) && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                  )}
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                       <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div></div>
@@ -2549,4 +3003,9 @@ export default function TutorPulse() {
       <NotificationsPanel />
     </div>
   );
-      }
+}
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(TutorPulse));
+</script>
+</body>
+</html>
