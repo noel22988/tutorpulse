@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 // TUTORPULSE — Intelligent Tutor Scheduling & Fee Management
 // ═══════════════════════════════════════════════════════════════
 
-const STORAGE_KEY = "tutorpulse-data-v2";
+const STORAGE_KEY = "tutorpulse-data";
 
 // ── Premium badge ────────────────────────────────────────────
 const PremiumBadge = () => (
