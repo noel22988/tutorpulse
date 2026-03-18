@@ -71,8 +71,9 @@ const createStore = () => {
   ];
 
   const revenueHistory = [];
+  const settings = { tutorName: "Leon" };
 
-  return { students, lessons, payments, messages, notifications, revenueHistory };
+  return { students, lessons, payments, messages, notifications, revenueHistory, settings };
 };
 
 // ── Persistence helpers ─────────────────────────────────────
@@ -465,7 +466,7 @@ export default function TutorPulse() {
     const [y, mo] = monthStr.split("-").map(Number);
     const lessons = store.lessons.filter((l) => {
       const d = new Date(l.date);
-      return l.studentId === studentId && d.getFullYear() === y && d.getMonth() === mo - 1 && l.status !== "cancelled";
+      return l.studentId === studentId && d.getFullYear() === y && d.getMonth() === mo - 1 && l.status !== "cancelled" && !l.excludeFromBilling;
     });
     const totalMinutes = lessons.reduce((sum, l) => sum + l.duration, 0);
     const totalHours = totalMinutes / 60;
@@ -497,7 +498,19 @@ export default function TutorPulse() {
     }).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 8);
   }, [store.lessons, now]);
 
-  const pendingPayments = useMemo(() => store.payments.filter((p) => p.status === "pending" || p.status === "overdue"), [store.payments]);
+  const pendingPayments = useMemo(() => {
+    const currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+    const activeIds = store.students.filter(s => s.status === "active" || s.status === "trial").map(s => s.id);
+    // Students with lessons this month who haven't paid
+    const studentsWithLessons = new Set();
+    store.lessons.forEach(l => {
+      const d = new Date(l.date);
+      const lMonth = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+      if (lMonth === currentMonth && l.status !== "cancelled" && activeIds.includes(l.studentId)) studentsWithLessons.add(l.studentId);
+    });
+    const paidStudents = new Set(store.payments.filter(p => p.month === currentMonth && p.status === "paid").map(p => p.studentId));
+    return Array.from(studentsWithLessons).filter(sid => !paidStudents.has(sid));
+  }, [store.students, store.lessons, store.payments, now]);
   const activeStudents = useMemo(() => store.students.filter((s) => s.status === "active"), [store.students]);
   const monthlyRevenue = useMemo(() => store.payments.filter((p) => p.status === "paid" && p.month === "2026-02").reduce((sum, p) => {
     const calc = calcMonthlyFee(p.studentId, p.month);
@@ -550,7 +563,7 @@ export default function TutorPulse() {
           {now.toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
         <h1 style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Playfair Display', serif", lineHeight: 1.2 }}>
-          Good {now.getHours() < 12 ? "morning" : now.getHours() < 17 ? "afternoon" : "evening"}, Leon
+          Hi, {store.settings?.tutorName || "there"}
         </h1>
       </div>
 
@@ -638,7 +651,8 @@ export default function TutorPulse() {
   // PAGE: SCHEDULE / CALENDAR
   // ═══════════════════════════════════════════════════════════
   const SchedulePage = () => {
-    const [viewMode, setViewMode] = useState("list");
+    const [viewMode, setViewMode] = useState("today");
+    const [selectedDay, setSelectedDay] = useState(null);
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -653,13 +667,44 @@ export default function TutorPulse() {
       return store.lessons.filter((l) => {
         const d = new Date(l.date);
         return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
-      });
+      }).sort((a, b) => new Date(a.date) - new Date(b.date));
     };
 
     const monthLessons = store.lessons.filter((l) => {
       const d = new Date(l.date);
       return d.getMonth() === month && d.getFullYear() === year;
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const todayAllLessons = store.lessons.filter((l) => {
+      const d = new Date(l.date);
+      return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const selectedDayLessons = selectedDay ? getLessonsForDay(selectedDay) : [];
+
+    const renderLessonCard = (lesson) => {
+      const student = getStudent(lesson.studentId);
+      return (
+        <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ minWidth: 54, textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500 }}>{formatDate(lesson.date).split(",")[0]}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent }}>{new Date(lesson.date).getDate()}</div>
+            </div>
+            <div style={{ width: 1, height: 40, background: theme.border }} />
+            <Avatar initials={student ? student.avatar : "?"} size={32} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{student ? student.name : "Unknown"}</div>
+              <div style={{ fontSize: 12, color: theme.textSecondary }}>{lesson.subject}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{formatTime(lesson.date)}</div>
+              <Badge text={lesson.status} color={getStatusColor(lesson.status)} bg={getStatusBg(lesson.status)} />
+            </div>
+          </div>
+        </Card>
+      );
+    };
 
     return (
       <div className="fade-in">
@@ -668,79 +713,81 @@ export default function TutorPulse() {
           <Button size="sm" icon="plus" onClick={() => setShowNewLesson(true)}>New Lesson</Button>
         </div>
 
-        <TabBar tabs={[{ id: "list", label: "List" }, { id: "calendar", label: "Calendar" }]} active={viewMode} onChange={setViewMode} />
+        <TabBar tabs={[{ id: "today", label: "Today" }, { id: "month", label: "This Month" }, { id: "calendar", label: "Calendar" }]} active={viewMode} onChange={(v) => { setViewMode(v); setSelectedDay(null); }} />
 
-        {viewMode === "calendar" ? (
-          <Card>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
-              <select value={month} onChange={(e) => setCalendarDate(new Date(year, parseInt(e.target.value), 1))} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
-                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
-                  <option key={i} value={i}>{m}</option>
-                ))}
-              </select>
-              <select value={year} onChange={(e) => setCalendarDate(new Date(parseInt(e.target.value), month, 1))} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
-                {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-              <button onClick={() => setCalendarDate(new Date())} style={{ padding: "6px 10px", background: theme.accentBg, border: "1px solid " + theme.accent + "44", borderRadius: 8, color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Today</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
-              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                <div key={i} style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, padding: "8px 0" }}>{d}</div>
-              ))}
-              {calendarDays.map((day, i) => {
-                const lessons = getLessonsForDay(day);
-                const isToday = day && day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
-                return (
-                  <div key={i} style={{ padding: "6px 2px", minHeight: 48, borderRadius: 8, background: isToday ? theme.accentBg : "transparent", border: isToday ? `1px solid ${theme.accent}44` : "1px solid transparent" }}>
-                    {day && (
-                      <>
-                        <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 400, color: isToday ? theme.accent : theme.text, marginBottom: 2 }}>{day}</div>
-                        {lessons.length > 0 && (
-                          <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap" }}>
-                            {lessons.slice(0, 3).map((l, j) => (
-                              <div key={j} style={{ width: 6, height: 6, borderRadius: 3, background: getStatusColor(l.status) }} />
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        ) : (
+        {viewMode === "today" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {todayAllLessons.length === 0 ? (
+              <EmptyState icon="calendar" title="No lessons today" sub="Enjoy your day off!" />
+            ) : todayAllLessons.map(renderLessonCard)}
+          </div>
+        )}
+
+        {viewMode === "month" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {monthLessons.length === 0 ? (
               <EmptyState icon="calendar" title="No lessons this month" sub="Schedule a lesson to get started" />
-            ) : (
-              monthLessons.map((lesson) => {
-                const student = getStudent(lesson.studentId);
-                return (
-                  <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 14 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ minWidth: 54, textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500 }}>{formatDate(lesson.date).split(",")[0]}</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent }}>{new Date(lesson.date).getDate()}</div>
-                      </div>
-                      <div style={{ width: 1, height: 40, background: theme.border }} />
-                      <Avatar initials={student ? student.avatar : "?"} size={32} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{student ? student.name : "Unknown"}</div>
-                        <div style={{ fontSize: 12, color: theme.textSecondary }}>{lesson.subject}</div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{formatTime(lesson.date)}</div>
-                        <Badge text={lesson.status} color={getStatusColor(lesson.status)} bg={getStatusBg(lesson.status)} />
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })
-            )}
+            ) : monthLessons.map(renderLessonCard)}
           </div>
+        )}
+
+        {viewMode === "calendar" && (
+          <>
+            <Card>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
+                <select value={month} onChange={(e) => { setCalendarDate(new Date(year, parseInt(e.target.value), 1)); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
+                  {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                    <option key={i} value={i}>{m}</option>
+                  ))}
+                </select>
+                <select value={year} onChange={(e) => { setCalendarDate(new Date(parseInt(e.target.value), month, 1)); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
+                  {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <button onClick={() => { setCalendarDate(new Date()); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.accentBg, border: "1px solid " + theme.accent + "44", borderRadius: 8, color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Today</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
+                {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                  <div key={i} style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, padding: "8px 0" }}>{d}</div>
+                ))}
+                {calendarDays.map((day, i) => {
+                  const lessons = getLessonsForDay(day);
+                  const isToday = day && day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
+                  const isSelected = day && day === selectedDay;
+                  return (
+                    <div key={i} onClick={() => { if (day) setSelectedDay(selectedDay === day ? null : day); }} style={{ padding: "6px 2px", minHeight: 48, borderRadius: 8, background: isSelected ? theme.accent + "22" : isToday ? theme.accentBg : "transparent", border: isSelected ? "1px solid " + theme.accent : isToday ? "1px solid " + theme.accent + "44" : "1px solid transparent", cursor: day ? "pointer" : "default" }}>
+                      {day && (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? theme.accent : isToday ? theme.accent : theme.text, marginBottom: 2 }}>{day}</div>
+                          {lessons.length > 0 && (
+                            <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap" }}>
+                              {lessons.slice(0, 3).map((l, j) => (
+                                <div key={j} style={{ width: 6, height: 6, borderRadius: 3, background: getStatusColor(l.status) }} />
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+            {/* Selected day lessons */}
+            {selectedDay && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: theme.textSecondary, marginBottom: 8 }}>
+                  {new Date(year, month, selectedDay).toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long" })} — {selectedDayLessons.length} lesson{selectedDayLessons.length !== 1 ? "s" : ""}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {selectedDayLessons.length === 0 ? (
+                    <Card style={{ padding: 14 }}><div style={{ fontSize: 13, color: theme.textMuted, textAlign: "center" }}>No lessons on this day</div></Card>
+                  ) : selectedDayLessons.map(renderLessonCard)}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     );
@@ -880,9 +927,6 @@ export default function TutorPulse() {
       <div className="fade-in">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h1 style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Fee Collection</h1>
-          <Button variant="secondary" size="sm" icon="send" onClick={() => setShowMessageCompose("bulk")} style={{ background: "rgba(37, 211, 102, 0.1)", borderColor: "rgba(37, 211, 102, 0.3)", color: "#25D366" }}>
-            WhatsApp Reminders
-          </Button>
         </div>
 
         {/* Month Selector */}
@@ -892,22 +936,29 @@ export default function TutorPulse() {
             const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
             quickMonths.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
           }
-          const otherMonths = availableMonths.filter(m => !quickMonths.includes(m));
+          const isQuick = quickMonths.includes(monthView);
+          const viewParts = monthView.split("-").map(Number);
           return (
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", overflowX: "auto" }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
               {quickMonths.map((m) => (
                 <button key={m} onClick={() => setMonthView(m)} style={{ padding: "8px 16px", borderRadius: 10, border: "1px solid " + (monthView === m ? theme.accent : theme.border), background: monthView === m ? theme.accentBg : "transparent", color: monthView === m ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
                   {formatMonth(m)}
                 </button>
               ))}
-              {otherMonths.length > 0 && (
-                <select value={quickMonths.includes(monthView) ? "" : monthView} onChange={(e) => { if (e.target.value) setMonthView(e.target.value); }} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid " + (!quickMonths.includes(monthView) && monthView ? theme.accent : theme.border), background: !quickMonths.includes(monthView) && monthView ? theme.accentBg : theme.bgInput, color: !quickMonths.includes(monthView) && monthView ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", appearance: "none" }}>
-                  <option value="">More...</option>
-                  {otherMonths.map((m) => (
-                    <option key={m} value={m}>{formatMonth(m)}</option>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <select value={isQuick ? "" : String(viewParts[1])} onChange={(e) => { if (e.target.value) { const m = (viewParts[0] || now.getFullYear()) + "-" + e.target.value.padStart(2, "0"); setMonthView(m); } }} style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid " + (!isQuick ? theme.accent : theme.border), background: !isQuick ? theme.accentBg : theme.bgInput, color: !isQuick ? theme.accent : theme.textSecondary, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", appearance: "none" }}>
+                  <option value="">Mth</option>
+                  {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                    <option key={i} value={String(i + 1)}>{m}</option>
                   ))}
                 </select>
-              )}
+                <select value={isQuick ? "" : String(viewParts[0])} onChange={(e) => { if (e.target.value) { const mo = viewParts[1] || (now.getMonth() + 1); setMonthView(e.target.value + "-" + String(mo).padStart(2, "0")); } }} style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid " + (!isQuick ? theme.accent : theme.border), background: !isQuick ? theme.accentBg : theme.bgInput, color: !isQuick ? theme.accent : theme.textSecondary, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", appearance: "none" }}>
+                  <option value="">Year</option>
+                  {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           );
         })()}
@@ -1412,6 +1463,28 @@ export default function TutorPulse() {
               })()}
             </Card>
 
+            {/* Profile Settings */}
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>PROFILE</div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: theme.textSecondary, flexShrink: 0 }}>Display Name</span>
+                <input
+                  type="text"
+                  defaultValue={store.settings?.tutorName || ""}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val !== (store.settings?.tutorName || "")) {
+                      setStore((s) => ({ ...s, settings: { ...(s.settings || {}), tutorName: val } }));
+                      addToast("Name updated");
+                    }
+                  }}
+                  placeholder="Your name"
+                  style={{ flex: 1, padding: "8px 12px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Shown on the dashboard greeting and invoice messages.</div>
+            </Card>
+
             {/* Data Reset */}
             <Card style={{ padding: 14, borderColor: theme.danger + "44" }}>
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8 }}>DANGER ZONE</div>
@@ -1608,7 +1681,7 @@ export default function TutorPulse() {
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Select label="Duration" value={form.duration} onChange={(v) => updateForm("duration", v)} options={[{ value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }]} />
+          <Select label="Duration" value={form.duration} onChange={(v) => updateForm("duration", v)} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }]} />
           <Select label="Location" value={form.location} onChange={(v) => updateForm("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
         </div>
         <Input label="Subject / Topic" value={form.subject} onChange={(v) => updateForm("subject", v)} placeholder="e.g., 华文 作文 练习" />
@@ -1646,36 +1719,11 @@ export default function TutorPulse() {
   };
 
   // ── New Student Modal ──────────────────────────────────────
-  const NewStudentModal = () => {
-    const [form, setForm] = useState({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", notes: "" });
-    const updateForm = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  // ── New Student form state (at parent level to prevent remount reset) ──
+  const [newStudentForm, setNewStudentForm] = useState({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", notes: "" });
+  const updateNewStudentForm = (k, v) => setNewStudentForm((f) => ({ ...f, [k]: v }));
 
-    return (
-      <Modal open={showNewStudent} onClose={() => setShowNewStudent(false)} title="Add New Student">
-        <Input label="Student Name" value={form.name} onChange={(v) => updateForm("name", v)} placeholder="Full name" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Select label="Level" value={form.level} onChange={(v) => updateForm("level", v)} options={LEVEL_OPTIONS} />
-          <Select label="Stream" value={form.stream} onChange={(v) => updateForm("stream", v)} options={STREAM_OPTIONS} />
-        </div>
-        <Input label="Parent Name" value={form.parent} onChange={(v) => updateForm("parent", v)} placeholder="Parent/Guardian name" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Input label="Phone" value={form.parentPhone} onChange={(v) => updateForm("parentPhone", v)} placeholder="+65 9XXX XXXX" />
-          <Input label="Email" value={form.parentEmail} onChange={(v) => updateForm("parentEmail", v)} placeholder="email@example.com" />
-        </div>
-        <Input label="Hourly Rate ($)" type="number" value={form.hourlyRate} onChange={(v) => updateForm("hourlyRate", v)} />
-        <Input label="Notes" value={form.notes} onChange={(v) => updateForm("notes", v)} multiline placeholder="Any notes about the student..." />
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button onClick={() => {
-            if (!form.name) { addToast("Please enter student name", "error"); return; }
-            const initials = form.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2);
-            addStudent({ name: form.name, level: form.level, stream: form.stream, parent: form.parent, parentPhone: form.parentPhone, parentEmail: form.parentEmail, hourlyRate: parseFloat(form.hourlyRate) || 70, status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: form.notes, avatar: initials });
-            setShowNewStudent(false);
-          }}>Add Student</Button>
-          <Button variant="secondary" onClick={() => setShowNewStudent(false)}>Cancel</Button>
-        </div>
-      </Modal>
-    );
-  };
+  // (New student modal is rendered inline in the main return)
 
   // ── Student Detail Modal (with Edit Mode) ───────────────────
   // (Student detail modal is rendered inline in the main return)
@@ -2298,7 +2346,7 @@ export default function TutorPulse() {
                 <Input label="Time" type="time" value={lessonEdit.time} onChange={(v) => le("time", v)} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <Select label="Duration" value={lessonEdit.duration} onChange={(v) => le("duration", v)} options={[{ value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }, { value: "150", label: "150 min" }, { value: "180", label: "180 min" }]} />
+                <Select label="Duration" value={lessonEdit.duration} onChange={(v) => le("duration", v)} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }, { value: "150", label: "150 min" }, { value: "180", label: "180 min" }]} />
                 <Select label="Location" value={lessonEdit.location} onChange={(v) => le("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
               </div>
               <Input label="Subject / Topic" value={lessonEdit.subject} onChange={(v) => le("subject", v)} />
@@ -2309,9 +2357,9 @@ export default function TutorPulse() {
             </>
           )}
           {/* Session Feedback — uncontrolled to prevent re-render on every keystroke */}
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 16 }}>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Session Feedback / Notes</label>
-            <textarea key={selectedLesson.id} defaultValue={selectedLesson.comment || ""} onBlur={(e) => {
+            <textarea key={selectedLesson.id + "-fb"} defaultValue={selectedLesson.comment || ""} onBlur={(e) => {
               const val = e.target.value;
               if (val !== (selectedLesson.comment || "")) {
                 updateLesson(selectedLesson.id, { comment: val });
@@ -2320,7 +2368,30 @@ export default function TutorPulse() {
               }
             }} placeholder="Add feedback for this session..." rows={3} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical" }} />
             <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>
-              <Icon name="eye" size={11} color={theme.textMuted} /> Feedback auto-saves when you tap outside. Appears in Fee Invoice.
+              <Icon name="eye" size={11} color={theme.textMuted} /> Appears in Fee Invoice to parents.
+            </div>
+          </div>
+          {/* Homework — separate from feedback, not included in AI invoice summary */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Homework</label>
+            <textarea key={selectedLesson.id + "-hw"} defaultValue={selectedLesson.homework || ""} onBlur={(e) => {
+              const val = e.target.value;
+              if (val !== (selectedLesson.homework || "")) {
+                updateLesson(selectedLesson.id, { homework: val });
+                setSelectedLesson({ ...selectedLesson, homework: val });
+                addToast("Homework saved");
+              }
+            }} placeholder="Homework assigned (not shown in invoice)..." rows={2} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical" }} />
+            <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>For your own records. Not included in AI-generated invoices.</div>
+          </div>
+          {/* Exclude from billing toggle */}
+          <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
+            <button onClick={() => { const newVal = !selectedLesson.excludeFromBilling; updateLesson(selectedLesson.id, { excludeFromBilling: newVal }); setSelectedLesson({ ...selectedLesson, excludeFromBilling: newVal }); addToast(newVal ? "Excluded from billing" : "Included in billing"); }} style={{ width: 40, height: 22, borderRadius: 11, border: "none", background: selectedLesson.excludeFromBilling ? theme.danger : theme.borderLight, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+              <div style={{ width: 18, height: 18, borderRadius: 9, background: "white", position: "absolute", top: 2, left: selectedLesson.excludeFromBilling ? 20 : 2, transition: "left 0.2s" }} />
+            </button>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: selectedLesson.excludeFromBilling ? theme.danger : theme.textSecondary }}>Exclude from billing</div>
+              <div style={{ fontSize: 11, color: theme.textMuted }}>Toggle on for agency intro lessons or waived sessions</div>
             </div>
           </div>
           {/* Actions — always show edit + delete, even for completed/cancelled */}
@@ -2346,16 +2417,43 @@ export default function TutorPulse() {
         </Modal>
       )}
       <NewLessonModal />
-      <NewStudentModal />
+      {/* New Student Modal — inline to prevent form reset on clock tick */}
+      {showNewStudent && (
+        <Modal open={showNewStudent} onClose={() => setShowNewStudent(false)} title="Add New Student">
+          <Input label="Student Name" value={newStudentForm.name} onChange={(v) => updateNewStudentForm("name", v)} placeholder="Full name" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Select label="Level" value={newStudentForm.level} onChange={(v) => updateNewStudentForm("level", v)} options={LEVEL_OPTIONS} />
+            <Select label="Stream" value={newStudentForm.stream} onChange={(v) => updateNewStudentForm("stream", v)} options={STREAM_OPTIONS} />
+          </div>
+          <Input label="Parent Name" value={newStudentForm.parent} onChange={(v) => updateNewStudentForm("parent", v)} placeholder="Parent/Guardian name" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Input label="Phone" value={newStudentForm.parentPhone} onChange={(v) => updateNewStudentForm("parentPhone", v)} placeholder="+65 9XXX XXXX" />
+            <Input label="Email" value={newStudentForm.parentEmail} onChange={(v) => updateNewStudentForm("parentEmail", v)} placeholder="email@example.com" />
+          </div>
+          <Input label="Address" value={newStudentForm.address} onChange={(v) => updateNewStudentForm("address", v)} placeholder="Student's home address" />
+          <Input label="Hourly Rate ($)" type="number" value={newStudentForm.hourlyRate} onChange={(v) => updateNewStudentForm("hourlyRate", v)} />
+          <Input label="Notes" value={newStudentForm.notes} onChange={(v) => updateNewStudentForm("notes", v)} multiline placeholder="Any notes about the student..." />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button onClick={() => {
+              if (!newStudentForm.name) { addToast("Please enter student name", "error"); return; }
+              const initials = newStudentForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2);
+              addStudent({ name: newStudentForm.name, level: newStudentForm.level, stream: newStudentForm.stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
+              setNewStudentForm({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", notes: "" });
+              setShowNewStudent(false);
+            }}>Add Student</Button>
+            <Button variant="secondary" onClick={() => setShowNewStudent(false)}>Cancel</Button>
+          </div>
+        </Modal>
+      )}
       {/* Student Detail Modal — rendered inline to prevent scroll reset */}
       {selectedStudent && (() => {
         const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
         const startEdit = () => {
-          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, hourlyRate: String(selectedStudent.hourlyRate), notes: selectedStudent.notes || "", status: selectedStudent.status });
+          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status });
           setEditingStudent(true);
         };
         const saveEdit = () => {
-          const u = { name: studentEditForm.name, level: studentEditForm.level, stream: studentEditForm.stream, parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, notes: studentEditForm.notes, status: studentEditForm.status, avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+          const u = { name: studentEditForm.name, level: studentEditForm.level, stream: studentEditForm.stream, parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
           updateStudent(selectedStudent.id, u); setSelectedStudent({ ...selectedStudent, ...u }); setEditingStudent(false); addToast("Student updated");
         };
         const uf = (k, v) => setStudentEditForm((f) => ({ ...f, [k]: v }));
@@ -2383,6 +2481,7 @@ export default function TutorPulse() {
                 <Input label="Parent Name" value={studentEditForm.parent} onChange={(v) => uf("parent", v)} />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Phone" value={studentEditForm.parentPhone} onChange={(v) => uf("parentPhone", v)} /><Input label="Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} /></div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }]} /></div>
+                <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
                 <Input label="Notes" value={studentEditForm.notes} onChange={(v) => uf("notes", v)} multiline />
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}><Button size="sm" icon="check" onClick={saveEdit}>Save Changes</Button><Button size="sm" variant="secondary" onClick={() => setEditingStudent(false)}>Cancel</Button></div>
               </>
