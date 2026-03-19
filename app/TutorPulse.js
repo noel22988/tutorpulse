@@ -388,15 +388,14 @@ export default function TutorPulse() {
   const [showAI, setShowAI] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiHistory, setAiHistory] = useState(() => {
-    // Load from store on init
-    return [];
-  });
+  const [aiHistory, setAiHistory] = useState([]);
 
-  // Sync aiHistory from store on mount
+  // Load aiHistory from store after store is loaded
   useEffect(() => {
-    if (store.aiHistory) setAiHistory(store.aiHistory);
-  }, []);
+    if (loaded && store.aiHistory && store.aiHistory.length > 0 && aiHistory.length === 0) {
+      setAiHistory(store.aiHistory);
+    }
+  }, [loaded, store.aiHistory]);
 
   // Save aiHistory to store when it changes
   const updateAiHistory = (newHistory) => {
@@ -549,8 +548,21 @@ export default function TutorPulse() {
     }
     try {
       const tutorName = store.settings?.tutorName || "the tutor";
-      const context = `You are TutorPulse AI, an assistant for ${tutorName} who runs a tuition business. Current data: ${activeStudents.length} active students, ${pendingPayments.length} pending payments, monthly revenue $${monthlyRevenue}. Students: ${store.students.map(s => s.name + " (" + s.level + " " + s.stream + ")").join(", ")}. Respond concisely and helpfully. Do not use markdown formatting like ** or # or *.`;
-      // Build conversation history for follow-ups
+      const currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      // Build rich context with actual data
+      const studentDetails = store.students.map(s => {
+        const lessons = store.lessons.filter(l => l.studentId === s.id);
+        const monthLessons = lessons.filter(l => { const d = new Date(l.date); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === currentMonth && l.status !== "cancelled" && !l.excludeFromBilling; });
+        const totalHours = monthLessons.reduce((sum, l) => sum + l.duration, 0) / 60;
+        const fee = Math.round(s.hourlyRate * totalHours * 100) / 100;
+        const paid = store.payments.find(p => p.studentId === s.id && p.month === currentMonth && p.status === "paid");
+        return s.name + " (" + s.level + " " + s.stream + ", $" + s.hourlyRate + "/hr, " + monthLessons.length + " lessons this month, " + totalHours + "h, fee: $" + fee + ", " + (paid ? "PAID" : "UNPAID") + ", status: " + s.status + ")";
+      }).join("; ");
+      const totalRevenue = store.students.filter(s => s.status === "active").reduce((sum, s) => {
+        const calc = calcMonthlyFee(s.id, currentMonth);
+        return sum + calc.total;
+      }, 0);
+      const context = `You are TutorPulse AI, an assistant for ${tutorName} who runs a tuition business. Current month: ${now.toLocaleDateString("en-SG", { month: "long", year: "numeric" })}. Total active students: ${activeStudents.length}. Projected monthly revenue: $${totalRevenue.toFixed(2)}. Unpaid this month: ${pendingPayments.length}. Student details: ${studentDetails}. Respond concisely and helpfully. Do not use markdown formatting like ** or # or *.`;
       const messages = isFollowUp ? [...aiConversation, { role: "user", content: prompt }] : [{ role: "user", content: prompt }];
       const response = await fetch("/api/ai", {
         method: "POST",
@@ -566,15 +578,24 @@ export default function TutorPulse() {
       const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
       const result = text || "I couldn't generate a response. Please try again.";
       setAiResult(result);
-      setAiConversation([...messages, { role: "assistant", content: result }]);
+      const updatedConvo = [...messages, { role: "assistant", content: result }];
+      setAiConversation(updatedConvo);
+      // Save to history — store full thread
       if (!isFollowUp) {
-        updateAiHistory([{ q: prompt, a: result, time: new Date().toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }) }, ...aiHistory].slice(0, 20));
+        updateAiHistory([{ q: prompt, a: result, conversation: updatedConvo, time: new Date().toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }) }, ...aiHistory].slice(0, 20));
+      } else {
+        // Update the latest history entry with the extended conversation
+        const updated = [...aiHistory];
+        if (updated.length > 0) {
+          updated[0] = { ...updated[0], conversation: updatedConvo, a: result };
+        }
+        updateAiHistory(updated);
       }
     } catch (err) {
       setAiResult("AI is temporarily unavailable. Please try again later.");
     }
     setAiLoading(false);
-  }, [activeStudents.length, pendingPayments.length, monthlyRevenue, store.students, aiConversation, aiHistory]);
+  }, [activeStudents.length, pendingPayments.length, store.students, store.lessons, store.payments, store.settings, aiConversation, aiHistory, now, calcMonthlyFee]);
 
   // ── Navigation ─────────────────────────────────────────────
   const navItems = [
@@ -2318,11 +2339,15 @@ export default function TutorPulse() {
               <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>HISTORY ({aiHistory.length})</div>
               <button onClick={() => { updateAiHistory([]); addToast("History cleared"); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.danger, fontFamily: "'DM Sans', sans-serif" }}>Clear All</button>
             </div>
-            <div style={{ maxHeight: 200, overflow: "auto" }}>
+            <div style={{ maxHeight: 250, overflow: "auto" }}>
               {aiHistory.map((h, i) => (
-                <div key={i} style={{ padding: "8px 0", borderBottom: i < aiHistory.length - 1 ? "1px solid " + theme.border : "none", cursor: "pointer" }} onClick={() => { setAiResult(h.a); }}>
+                <div key={i} style={{ padding: "8px 0", borderBottom: i < aiHistory.length - 1 ? "1px solid " + theme.border : "none", cursor: "pointer" }} onClick={() => {
+                  // Restore the full conversation thread
+                  setAiResult(h.a);
+                  if (h.conversation) setAiConversation(h.conversation);
+                }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: theme.text, marginBottom: 2 }}>{h.q}</div>
-                  <div style={{ fontSize: 11, color: theme.textMuted }}>{h.time} · {h.a.substring(0, 60)}...</div>
+                  <div style={{ fontSize: 11, color: theme.textMuted }}>{h.time} · {(h.conversation ? Math.floor(h.conversation.length / 2) + " messages" : "")} · {h.a.substring(0, 50)}...</div>
                 </div>
               ))}
             </div>
@@ -2789,3 +2814,4 @@ export default function TutorPulse() {
     </div>
   );
 }
+
