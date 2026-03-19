@@ -576,10 +576,10 @@ export default function TutorPulse() {
       </div>
 
       {/* Stats Row */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4 }}>
-        <div onClick={() => setPage("students")} style={{ flex: 1, minWidth: 150, cursor: "pointer" }}><StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} /></div>
-        <div onClick={() => setPage("schedule")} style={{ flex: 1, minWidth: 150, cursor: "pointer" }}><StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={(() => { const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1); const tmrCount = store.lessons.filter(l => { const d = new Date(l.date); return d.getDate() === tmr.getDate() && d.getMonth() === tmr.getMonth() && d.getFullYear() === tmr.getFullYear() && l.status !== "cancelled"; }).length; return tmrCount > 0 ? tmrCount + " tomorrow" : "none tomorrow"; })()} color={theme.info} /></div>
-        <div onClick={() => setPage("payments")} style={{ flex: 1, minWidth: 150, cursor: "pointer" }}><StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={`${pendingPayments.length} unpaid`} color={theme.success} /></div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4, alignItems: "stretch" }}>
+        <div onClick={() => setPage("students")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} /></div>
+        <div onClick={() => setPage("schedule")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={(() => { const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1); const tmrCount = store.lessons.filter(l => { const d = new Date(l.date); return d.getDate() === tmr.getDate() && d.getMonth() === tmr.getMonth() && d.getFullYear() === tmr.getFullYear() && l.status !== "cancelled"; }).length; return tmrCount + " tomorrow"; })()} color={theme.info} /></div>
+        <div onClick={() => setPage("payments")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={`${pendingPayments.length} unpaid`} color={theme.success} /></div>
       </div>
 
       {/* Today's Schedule */}
@@ -818,8 +818,7 @@ export default function TutorPulse() {
 
         {/* Search */}
         <div style={{ position: "relative", marginBottom: 16 }}>
-          <Icon name="search" size={16} color={theme.textMuted} className="" />
-          <input defaultValue={searchQuery} onInput={(e) => setSearchQuery(e.target.value)} placeholder="Search students..." style={{ width: "100%", padding: "10px 14px 10px 36px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+          <input key="student-search" defaultValue={searchQuery} onInput={(e) => setSearchQuery(e.target.value)} placeholder="Search students..." style={{ width: "100%", padding: "10px 14px 10px 36px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
           <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
             <Icon name="search" size={16} color={theme.textMuted} />
           </div>
@@ -2205,11 +2204,11 @@ export default function TutorPulse() {
               openWhatsApp(student.parentPhone, msgText);
               addToast("WhatsApp opened for " + student.parent);
               setShowMessageCompose(null); setMsgText(""); setActiveTemplate(null);
-            }} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 12, border: "none", background: "#25D366", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(37, 211, 102, 0.3)" }}>
+            }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 20px", borderRadius: 12, border: "none", background: "#25D366", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(37, 211, 102, 0.3)", whiteSpace: "nowrap", flex: 1 }}>
               <WAIcon /> Send via WhatsApp
             </button>
           )}
-          <Button variant="secondary" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setActiveTemplate(null); }}>Cancel</Button>
+          <Button variant="secondary" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setActiveTemplate(null); }} style={{ flex: "0 0 auto" }}>Cancel</Button>
         </div>
         {!isBulk && student && (
           <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8, textAlign: "center" }}>Opens WhatsApp with {student.parent}'s number ({student.parentPhone}) pre-filled</div>
