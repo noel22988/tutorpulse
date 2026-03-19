@@ -1702,6 +1702,9 @@ export default function TutorPulse() {
     }
   }, [msgText]);
 
+  // Get current text from textarea ref (live) or state (fallback)
+  const getMsgText = () => (msgTextRef.current ? msgTextRef.current.value : msgText);
+
   const MessageComposeModal = () => {
     const generating = msgGenerating; const setGenerating = setMsgGenerating;
     const [bulkSentIndex, setBulkSentIndex] = useState(-1);
@@ -2134,16 +2137,17 @@ export default function TutorPulse() {
             <label style={{ fontSize: 12, fontWeight: 600, color: theme.textSecondary, letterSpacing: 0.5, textTransform: "uppercase" }}>
               Message {activeTemplate && activeTemplate !== "ai" ? "— " + (templateDefs.find(t => t.id === activeTemplate) || {}).label : ""}
             </label>
-            {msgText && <span style={{ fontSize: 10, color: theme.textMuted }}>{msgText.length} chars</span>}
+            {getMsgText() && <span style={{ fontSize: 10, color: theme.textMuted }}>{getMsgText().length} chars</span>}
           </div>
-          <textarea ref={msgTextRef} key={"msg-" + showMessageCompose} defaultValue={msgText} onInput={(e) => { setMsgText(e.target.value); if (msgActiveTemplate) setMsgActiveTemplate(null); }} placeholder="Select a template above, or type your own..." rows={10} style={{ width: "100%", padding: "12px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", resize: "vertical", lineHeight: 1.6 }} />
-          {msgText && (
+          <textarea ref={msgTextRef} key={"msg-" + showMessageCompose} defaultValue={msgText} onBlur={(e) => { setMsgText(e.target.value); }} placeholder="Select a template above, or type your own..." rows={10} style={{ width: "100%", padding: "12px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", resize: "vertical", lineHeight: 1.6 }} />
+          {getMsgText() && (
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               {["Chinese (中文)", "Malay", "Tamil"].map((lang) => (
                 <button key={lang} onClick={async () => {
+                  const currentTxt = getMsgText();
                   setMsgGenerating(true);
                   try {
-                    const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + msgText }] }) });
+                    const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
                     const data = await res.json();
                     const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
                     if (text) { setMsgText(text); addToast("Translated to " + lang.split(" (")[0]); }
@@ -2168,10 +2172,11 @@ export default function TutorPulse() {
             <>
               {bulkSentIndex < bulkRecipients.length - 1 ? (
                 <button onClick={() => {
-                  if (!msgText.trim() && !activeTemplate) { addToast("Select a template or type a message", "error"); return; }
+                  const txt = getMsgText();
+                  if (!txt.trim() && !activeTemplate) { addToast("Select a template or type a message", "error"); return; }
                   const nextIdx = bulkSentIndex + 1;
                   const recipient = bulkRecipients[nextIdx];
-                  let personalMsg = msgText;
+                  let personalMsg = txt;
                   if (activeTemplate && activeTemplate !== "ai") {
                     const tpl = templateDefs.find((t) => t.id === activeTemplate);
                     if (tpl) {
@@ -2180,7 +2185,7 @@ export default function TutorPulse() {
                       personalMsg = personalMsg.replace("[AI_SUMMARY_PLACEHOLDER]\n\n", "").replace("[AI_SUMMARY_PLACEHOLDER]", "");
                     }
                   } else {
-                    personalMsg = personalizeMessage(msgText, recipient);
+                    personalMsg = personalizeMessage(txt, recipient);
                   }
                   setStore((s) => ({ ...s, messages: [...s.messages, { id: "m" + genId(), parentId: recipient.studentId, direction: "out", text: personalMsg, date: new Date().toISOString(), read: true }] }));
                   openWhatsApp(recipient.phone, personalMsg);
@@ -2209,9 +2214,10 @@ export default function TutorPulse() {
             </>
           ) : (
             <button onClick={() => {
-              if (!msgText.trim()) { addToast("Select a template or type a message", "error"); return; }
-              setStore((s) => ({ ...s, messages: [...s.messages, { id: "m" + genId(), parentId: showMessageCompose, direction: "out", text: msgText, date: new Date().toISOString(), read: true }] }));
-              openWhatsApp(student.parentPhone, msgText);
+              const txt = getMsgText();
+              if (!txt.trim()) { addToast("Select a template or type a message", "error"); return; }
+              setStore((s) => ({ ...s, messages: [...s.messages, { id: "m" + genId(), parentId: showMessageCompose, direction: "out", text: txt, date: new Date().toISOString(), read: true }] }));
+              openWhatsApp(student.parentPhone, txt);
               addToast("WhatsApp opened for " + student.parent);
               setShowMessageCompose(null); setMsgText(""); setActiveTemplate(null);
             }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 20px", borderRadius: 12, border: "none", background: "#25D366", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(37, 211, 102, 0.3)", whiteSpace: "nowrap", flex: 1 }}>
