@@ -388,7 +388,21 @@ export default function TutorPulse() {
   const [showAI, setShowAI] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiHistory, setAiHistory] = useState([]);
+  const [aiHistory, setAiHistory] = useState(() => {
+    // Load from store on init
+    return [];
+  });
+
+  // Sync aiHistory from store on mount
+  useEffect(() => {
+    if (store.aiHistory) setAiHistory(store.aiHistory);
+  }, []);
+
+  // Save aiHistory to store when it changes
+  const updateAiHistory = (newHistory) => {
+    setAiHistory(newHistory);
+    setStore(s => ({ ...s, aiHistory: newHistory }));
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [studentFilter, setStudentFilter] = useState("all");
   const searchRef = useRef("");
@@ -525,12 +539,19 @@ export default function TutorPulse() {
   const unreadNotifs = useMemo(() => store.notifications.filter((n) => !n.read).length, [store.notifications]);
 
   // ── AI Assistant ────────────────────────────────────────────
-  const callAI = useCallback(async (prompt) => {
+  const [aiConversation, setAiConversation] = useState([]);
+
+  const callAI = useCallback(async (prompt, isFollowUp = false) => {
     setAiLoading(true);
-    setAiResult("");
+    if (!isFollowUp) {
+      setAiResult("");
+      setAiConversation([]);
+    }
     try {
       const tutorName = store.settings?.tutorName || "the tutor";
-      const context = `You are TutorPulse AI, an assistant for ${tutorName} who runs a tuition business. Current data: ${activeStudents.length} active students, ${pendingPayments.length} pending payments, monthly revenue $${monthlyRevenue}. Students: ${store.students.map(s => s.name + " (" + s.level + " " + s.stream + ")").join(", ")}. Respond concisely and helpfully.`;
+      const context = `You are TutorPulse AI, an assistant for ${tutorName} who runs a tuition business. Current data: ${activeStudents.length} active students, ${pendingPayments.length} pending payments, monthly revenue $${monthlyRevenue}. Students: ${store.students.map(s => s.name + " (" + s.level + " " + s.stream + ")").join(", ")}. Respond concisely and helpfully. Do not use markdown formatting like ** or # or *.`;
+      // Build conversation history for follow-ups
+      const messages = isFollowUp ? [...aiConversation, { role: "user", content: prompt }] : [{ role: "user", content: prompt }];
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -538,19 +559,22 @@ export default function TutorPulse() {
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
           system: context,
-          messages: [{ role: "user", content: prompt }],
+          messages: messages,
         }),
       });
       const data = await response.json();
       const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
       const result = text || "I couldn't generate a response. Please try again.";
       setAiResult(result);
-      setAiHistory((h) => [{ q: prompt, a: result, time: new Date().toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }) }, ...h].slice(0, 20));
+      setAiConversation([...messages, { role: "assistant", content: result }]);
+      if (!isFollowUp) {
+        updateAiHistory([{ q: prompt, a: result, time: new Date().toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }) }, ...aiHistory].slice(0, 20));
+      }
     } catch (err) {
       setAiResult("AI is temporarily unavailable. Please try again later.");
     }
     setAiLoading(false);
-  }, [activeStudents.length, pendingPayments.length, monthlyRevenue, store.students]);
+  }, [activeStudents.length, pendingPayments.length, monthlyRevenue, store.students, aiConversation, aiHistory]);
 
   // ── Navigation ─────────────────────────────────────────────
   const navItems = [
@@ -2237,7 +2261,6 @@ export default function TutorPulse() {
   const AIAssistantModal = () => {
     const [prompt, setPrompt] = useState("");
     const suggestions = [
-      "Draft a progress report for [student]'s parents",
       "What's my projected revenue for March?",
       "Suggest a lesson plan for P6 高级华文 阅读理解",
       "Write a mid-term assessment summary for all students",
@@ -2279,13 +2302,13 @@ export default function TutorPulse() {
         )}
         {aiResult && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <Button size="sm" variant="secondary" icon="repeat" onClick={() => setAiResult("")}>New Question</Button>
+            <Button size="sm" variant="secondary" icon="repeat" onClick={() => { setAiResult(""); setAiConversation([]); setPrompt(""); }}>New Question</Button>
           </div>
         )}
 
         <div style={{ display: "flex", gap: 8 }}>
-          <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Ask TutorPulse AI anything..." style={{ flex: 1, padding: "10px 14px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13 }} onKeyDown={(e) => { if (e.key === "Enter" && prompt.trim()) callAI(prompt); }} />
-          <Button size="sm" icon="send" onClick={() => { if (prompt.trim()) callAI(prompt); }} disabled={aiLoading || !prompt.trim()}>Ask</Button>
+          <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={aiResult ? "Follow up or ask for more detail..." : "Ask TutorPulse AI anything..."} style={{ flex: 1, padding: "10px 14px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13 }} onKeyDown={(e) => { if (e.key === "Enter" && prompt.trim()) { if (aiResult) { callAI(prompt, true); } else { callAI(prompt); } setPrompt(""); } }} />
+          <Button size="sm" icon="send" onClick={() => { if (prompt.trim()) { if (aiResult) { callAI(prompt, true); } else { callAI(prompt); } setPrompt(""); } }} disabled={aiLoading || !prompt.trim()}>{aiResult ? "Reply" : "Ask"}</Button>
         </div>
 
         {/* AI History */}
@@ -2293,7 +2316,7 @@ export default function TutorPulse() {
           <div style={{ marginTop: 16, borderTop: "1px solid " + theme.border, paddingTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
               <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>HISTORY ({aiHistory.length})</div>
-              <button onClick={() => { setAiHistory([]); addToast("History cleared"); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.danger, fontFamily: "'DM Sans', sans-serif" }}>Clear All</button>
+              <button onClick={() => { updateAiHistory([]); addToast("History cleared"); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.danger, fontFamily: "'DM Sans', sans-serif" }}>Clear All</button>
             </div>
             <div style={{ maxHeight: 200, overflow: "auto" }}>
               {aiHistory.map((h, i) => (
