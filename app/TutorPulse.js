@@ -391,6 +391,7 @@ export default function TutorPulse() {
   const [aiHistory, setAiHistory] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [studentFilter, setStudentFilter] = useState("all");
+  const searchRef = useRef("");
   const [scheduleViewMode, setScheduleViewMode] = useState("today");
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [paymentFilter, setPaymentFilter] = useState("all");
@@ -806,8 +807,9 @@ export default function TutorPulse() {
   // ═══════════════════════════════════════════════════════════
   const StudentsPage = () => {
     const filter = studentFilter; const setFilter = setStudentFilter;
+    const [localSearch, setLocalSearch] = useState(searchRef.current);
     const filtered = filter === "all" ? store.students : store.students.filter((s) => s.status === filter);
-    const searched = (searchQuery ? filtered.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.level.toLowerCase().includes(searchQuery.toLowerCase())) : filtered).sort((a, b) => a.name.localeCompare(b.name));
+    const searched = (localSearch ? filtered.filter((s) => s.name.toLowerCase().includes(localSearch.toLowerCase()) || s.level.toLowerCase().includes(localSearch.toLowerCase())) : filtered).sort((a, b) => a.name.localeCompare(b.name));
 
     return (
       <div className="fade-in">
@@ -818,7 +820,7 @@ export default function TutorPulse() {
 
         {/* Search */}
         <div style={{ position: "relative", marginBottom: 16 }}>
-          <input key="student-search" defaultValue={searchQuery} onInput={(e) => setSearchQuery(e.target.value)} placeholder="Search students..." style={{ width: "100%", padding: "10px 14px 10px 36px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+          <input key="student-search" value={localSearch} onChange={(e) => { setLocalSearch(e.target.value); searchRef.current = e.target.value; }} placeholder="Search students..." style={{ width: "100%", padding: "10px 14px 10px 36px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
           <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
             <Icon name="search" size={16} color={theme.textMuted} />
           </div>
@@ -1691,6 +1693,14 @@ export default function TutorPulse() {
   const [msgText, setMsgText] = useState("");
   const [msgGenerating, setMsgGenerating] = useState(false);
   const [msgActiveTemplate, setMsgActiveTemplate] = useState(null);
+  const msgTextRef = useRef(null);
+
+  // Sync textarea DOM when msgText changes from templates
+  useEffect(() => {
+    if (msgTextRef.current && msgTextRef.current.value !== msgText) {
+      msgTextRef.current.value = msgText;
+    }
+  }, [msgText]);
 
   const MessageComposeModal = () => {
     const generating = msgGenerating; const setGenerating = setMsgGenerating;
@@ -2126,7 +2136,7 @@ export default function TutorPulse() {
             </label>
             {msgText && <span style={{ fontSize: 10, color: theme.textMuted }}>{msgText.length} chars</span>}
           </div>
-          <textarea value={msgText} onChange={(e) => { setMsgText(e.target.value); if (activeTemplate) setMsgActiveTemplate(null); }} placeholder="Select a template above, or type your own..." rows={10} style={{ width: "100%", padding: "12px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", resize: "vertical", lineHeight: 1.6 }} />
+          <textarea ref={msgTextRef} key={"msg-" + showMessageCompose} defaultValue={msgText} onInput={(e) => { setMsgText(e.target.value); if (msgActiveTemplate) setMsgActiveTemplate(null); }} placeholder="Select a template above, or type your own..." rows={10} style={{ width: "100%", padding: "12px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", resize: "vertical", lineHeight: 1.6 }} />
           {msgText && (
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               {["Chinese (中文)", "Malay", "Tamil"].map((lang) => (
