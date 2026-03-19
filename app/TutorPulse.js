@@ -2316,9 +2316,18 @@ export default function TutorPulse() {
           </div>
         )}
 
-        {aiResult && (
-          <div style={{ padding: 16, background: theme.bgElevated, borderRadius: 12, marginBottom: 16, fontSize: 13, lineHeight: 1.7, color: theme.textSecondary, whiteSpace: "pre-wrap", maxHeight: 300, overflow: "auto", border: `1px solid ${theme.border}` }}>
-            {aiResult.replace(/\*\*/g, "").replace(/\*/g, "").replace(/#{1,3}\s/g, "").replace(/`/g, "")}
+        {aiConversation.length > 0 && (
+          <div style={{ marginBottom: 16, maxHeight: 400, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+            {aiConversation.map((msg, i) => (
+              <div key={i} style={{ padding: 12, borderRadius: 12, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap", background: msg.role === "user" ? theme.accentBg : theme.bgElevated, border: "1px solid " + (msg.role === "user" ? theme.accent + "44" : theme.border), color: msg.role === "user" ? theme.accent : theme.textSecondary, alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "95%" }}>
+                {msg.role === "user" ? (
+                  <div style={{ fontSize: 10, color: theme.textMuted, marginBottom: 4, fontWeight: 600 }}>YOU</div>
+                ) : (
+                  <div style={{ fontSize: 10, color: theme.purple, marginBottom: 4, fontWeight: 600 }}>AI</div>
+                )}
+                {msg.content.replace(/\*\*/g, "").replace(/\*/g, "").replace(/#{1,3}\s/g, "").replace(/`/g, "")}
+              </div>
+            ))}
           </div>
         )}
         {aiResult && (
@@ -2814,4 +2823,3 @@ export default function TutorPulse() {
     </div>
   );
 }
-
