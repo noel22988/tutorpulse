@@ -1194,8 +1194,11 @@ export default function TutorPulse() {
               <StatCard icon="check" label="Completion" value={`${completionRate}%`} color={theme.accent} />
               <StatCard icon="dollar" label="Collection" value={`${collectionRate}%`} sub="Last month" color={theme.purple} />
             </div>
-            <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 20, padding: "8px 12px", background: theme.bgInput, borderRadius: 8 }}>
-              <strong>Rev</strong> = total fees from active students this month · <strong>Avg</strong> = revenue ÷ active students · <strong>Completion</strong> = confirmed + completed lessons ÷ total · <strong>Collection</strong> = % of last month's fees collected
+            <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 20, padding: "8px 12px", background: theme.bgInput, borderRadius: 8, lineHeight: 1.8 }}>
+              <strong>Rev</strong> = total fees from active students this month<br/>
+              <strong>Avg</strong> = revenue ÷ active students<br/>
+              <strong>Completion</strong> = confirmed + completed lessons ÷ total<br/>
+              <strong>Collection</strong> = % of last month's fees collected
             </div>
 
             {/* Revenue Chart */}
@@ -1476,14 +1479,8 @@ export default function TutorPulse() {
               </div>
               <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: theme.textSecondary, marginBottom: 6 }}>How to import students</div>
-                <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.6 }}>
-                  1. Download the template above (.xlsx){"\n"}
-                  2. Open in Excel or Google Sheets{"\n"}
-                  3. Level, Stream and Status columns have dropdown menus{"\n"}
-                  4. See "Valid Values" tab for all options{"\n"}
-                  5. Delete the example row, fill in your students{"\n"}
-                  6. Save and tap "Import Students"{"\n"}
-                  7. Accepts both .xlsx and .csv files
+                <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.8, whiteSpace: "pre-line" }}>
+                  {"1. Download the template above (.xlsx)\n2. Open in Excel or Google Sheets\n3. Level, Stream and Status columns have dropdown menus\n4. See \"Valid Values\" tab for all options\n5. Delete the example row, fill in your students\n6. Save and tap \"Import Students\"\n7. Accepts both .xlsx and .csv files"}
                 </div>
               </div>
             </Card>
@@ -1664,7 +1661,7 @@ export default function TutorPulse() {
 
   // ── New Student Modal ──────────────────────────────────────
   // ── New Student form state (at parent level to prevent remount reset) ──
-  const [newStudentForm, setNewStudentForm] = useState({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", notes: "" });
+  const [newStudentForm, setNewStudentForm] = useState({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", gradeCurrent: "", notes: "" });
   const updateNewStudentForm = (k, v) => setNewStudentForm((f) => ({ ...f, [k]: v }));
 
   // (New student modal is rendered inline in the main return)
@@ -1969,8 +1966,8 @@ export default function TutorPulse() {
       const tpl = templateDefs.find((t) => t.id === tplId);
       if (!tpl) return;
 
-      // AI Custom Draft — use the existing generateAIMessage flow
-      if (tplId === "ai_custom") { generateAIMessage(); return; }
+      // AI Custom Draft — show prompt input
+      if (tplId === "ai_custom") { setMsgText(""); setMsgActiveTemplate("ai_custom"); return; }
 
       const targetSid = isBulk && bulkRecipients.length > 0 ? bulkRecipients[0].studentId : showMessageCompose;
       let msg = tpl.generate(targetSid);
@@ -2091,13 +2088,36 @@ export default function TutorPulse() {
                 <div style={{ fontSize: 10, color: theme.textMuted, lineHeight: 1.3 }}>{tpl.desc}</div>
               </button>
             ))}
-            {/* AI option */}
-            <button onClick={generateAIMessage} disabled={generating} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 10, border: "1px solid " + (activeTemplate === "ai" ? theme.purple + "88" : theme.border), background: activeTemplate === "ai" ? theme.purpleBg : theme.bgElevated, cursor: generating ? "wait" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: generating ? 0.6 : 1, gridColumn: "1 / -1" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: activeTemplate === "ai" ? theme.purple : theme.text, marginBottom: 2 }}>{generating ? "\u23F3 Generating..." : "\u2728 AI Custom Draft"}</div>
-              <div style={{ fontSize: 10, color: theme.textMuted, lineHeight: 1.3 }}>Let AI write a unique message using actual lesson & fee data</div>
-            </button>
           </div>
         </div>
+
+        {/* ── AI CUSTOM PROMPT INPUT ─────────────────────────── */}
+        {activeTemplate === "ai_custom" && (
+          <div style={{ marginBottom: 14, padding: 12, background: theme.bgElevated, borderRadius: 12, border: "1px solid " + theme.purple + "44" }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.purple, marginBottom: 6, letterSpacing: 0.5 }}>WHAT SHOULD THE AI WRITE?</label>
+            <textarea id="ai-custom-prompt" placeholder="e.g. Write a thank you message to the parent for their support this term..." rows={3} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical" }} />
+            <button onClick={async () => {
+              const customPrompt = document.getElementById("ai-custom-prompt")?.value;
+              if (!customPrompt?.trim()) { addToast("Please describe what you want", "error"); return; }
+              setMsgGenerating(true);
+              try {
+                let context = "";
+                if (!isBulk && student) {
+                  const inv = buildStudentInvoice(showMessageCompose);
+                  if (inv) context = "Student: " + inv.student.name + ", Level: " + inv.student.level + ", Parent: " + inv.student.parent + ", Lessons this month: " + inv.totalSessions + ", Fee: $" + inv.totalFee;
+                }
+                const fullPrompt = "You are " + tName + ", a tutor. " + (context ? "Context: " + context + ". " : "") + "Write a WhatsApp message based on this request: " + customPrompt + "\n\nKeep it warm and professional. Just the message, no preamble.";
+                const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: fullPrompt }] }) });
+                const data = await res.json();
+                const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
+                setMsgText(text || "AI couldn't generate. Try again.");
+              } catch (err) { setMsgText("AI unavailable. Please try again."); }
+              setMsgGenerating(false);
+            }} disabled={msgGenerating} style={{ marginTop: 8, padding: "8px 16px", borderRadius: 8, border: "none", background: theme.purple, color: "white", fontSize: 12, fontWeight: 700, cursor: msgGenerating ? "wait" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: msgGenerating ? 0.6 : 1 }}>
+              {msgGenerating ? "\u23F3 Generating..." : "\u2728 Generate Message"}
+            </button>
+          </div>
+        )}
 
         {/* ── MESSAGE EDITOR ────────────────────────────────── */}
         <div style={{ marginBottom: 14 }}>
@@ -2134,7 +2154,7 @@ export default function TutorPulse() {
         </div>
 
         {/* ── SEND BUTTONS ──────────────────────────────────── */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {isBulk ? (
             <>
               {bulkSentIndex < bulkRecipients.length - 1 ? (
@@ -2569,13 +2589,14 @@ export default function TutorPulse() {
           </div>
           <Input label="Address" value={newStudentForm.address} onChange={(v) => updateNewStudentForm("address", v)} placeholder="Student's home address" />
           <Input label="Hourly Rate ($)" type="number" value={newStudentForm.hourlyRate} onChange={(v) => updateNewStudentForm("hourlyRate", v)} />
+          <Input label="Current Grade" value={newStudentForm.gradeCurrent || ""} onChange={(v) => updateNewStudentForm("gradeCurrent", v)} placeholder="e.g. A2, B3, C5" />
           <Input label="Notes" value={newStudentForm.notes} onChange={(v) => updateNewStudentForm("notes", v)} multiline placeholder="Any notes about the student..." />
           <div style={{ display: "flex", gap: 8 }}>
             <Button onClick={() => {
               if (!newStudentForm.name) { addToast("Please enter student name", "error"); return; }
               const initials = newStudentForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2);
-              addStudent({ name: newStudentForm.name, level: newStudentForm.level, stream: newStudentForm.stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
-              setNewStudentForm({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", notes: "" });
+              addStudent({ name: newStudentForm.name, level: newStudentForm.level, stream: newStudentForm.stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, gradeCurrent: newStudentForm.gradeCurrent || "", gradeStart: newStudentForm.gradeCurrent || "", gradeHistory: [], status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
+              setNewStudentForm({ name: "", level: "P5", stream: "小学普华", parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", gradeCurrent: "", notes: "" });
               setShowNewStudent(false);
             }}>Add Student</Button>
             <Button variant="secondary" onClick={() => setShowNewStudent(false)}>Cancel</Button>
