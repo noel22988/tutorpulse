@@ -1281,6 +1281,24 @@ export default function TutorPulse() {
               </div>
             </Card>
 
+            {/* Students by Level */}
+            <Card style={{ marginBottom: 12 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Students by Level</h3>
+              {(() => {
+                const colors = [theme.accent, theme.info, theme.purple, theme.success, theme.warning, theme.danger, theme.textSecondary, theme.accentLight];
+                const levels = {};
+                store.students.filter(s => s.status === "active" || s.status === "trial").forEach(s => { levels[s.level] = (levels[s.level] || 0) + 1; });
+                const sorted = Object.entries(levels).sort((a, b) => b[1] - a[1]);
+                return sorted.map(([level, count], i) => (
+                  <div key={level} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: i > 0 ? "1px solid " + theme.border : "none" }}>
+                    <div style={{ width: 10, height: 10, borderRadius: 3, background: colors[i % colors.length] }} />
+                    <span style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>{level}</span>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{count}</span>
+                  </div>
+                ));
+              })()}
+            </Card>
+
             {/* Student breakdown by stream */}
             <Card>
               <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Students by Stream</h3>
@@ -1784,6 +1802,9 @@ export default function TutorPulse() {
     d.setMonth(d.getMonth() - 1);
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
   });
+  const [bulkSentIndex, setBulkSentIndex] = useState(-1);
+  const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [bulkPreviewIdx, setBulkPreviewIdx] = useState(null);
   const msgTextRef = useRef(null);
 
   // Sync textarea DOM when msgText changes from templates
@@ -1801,9 +1822,6 @@ export default function TutorPulse() {
     const activeTemplate = msgActiveTemplate; const setActiveTemplate = setMsgActiveTemplate;
     const isBulk = showMessageCompose === "bulk";
     const student = !isBulk ? getStudent(showMessageCompose) : null;
-    const [bulkSentIndex, setBulkSentIndex] = useState(-1);
-    const [bulkSelected, setBulkSelected] = useState(new Set());
-    const [bulkPreviewIdx, setBulkPreviewIdx] = useState(null);
 
     // Compute bulk recipients early (before other hooks that might reference it)
     const bulkRecipients = useMemo(() => {
@@ -1819,12 +1837,7 @@ export default function TutorPulse() {
       }).filter(Boolean);
     }, [isBulk, pendingPayments, getStudent, calcMonthlyFee, now]);
 
-    // Init bulk selection
-    useEffect(() => {
-      if (isBulk && bulkRecipients.length > 0 && bulkSelected.size === 0) {
-        setBulkSelected(new Set(bulkRecipients.map((_, i) => i)));
-      }
-    }, [isBulk, bulkRecipients.length]);
+    // bulkSelected starts empty — user picks who to send to
 
     // ── Build lesson & fee data for a given student ──────────
     const buildStudentInvoice = useCallback((sid) => {
@@ -2164,7 +2177,7 @@ export default function TutorPulse() {
     );
 
     return (
-      <Modal open={!!showMessageCompose} onClose={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setMsgActiveTemplate(null); }} title={isBulk ? "Fee Reminders via WhatsApp" : "WhatsApp " + (student ? student.parent : "")} width={540}>
+      <Modal open={!!showMessageCompose} onClose={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); }} title={isBulk ? "Fee Reminders via WhatsApp" : "WhatsApp " + (student ? student.parent : "")} width={540}>
 
         {/* Single: parent card */}
         {!isBulk && student && (
@@ -2282,11 +2295,6 @@ export default function TutorPulse() {
               ))}
             </div>
           )}
-          {isBulk && activeTemplate && activeTemplate !== "ai" && (
-            <div style={{ marginTop: 6, padding: 8, background: theme.infoBg, borderRadius: 8, border: "1px solid " + theme.info + "33" }}>
-              <div style={{ fontSize: 11, color: theme.info, fontWeight: 500 }}>\u2139\uFE0F Each parent receives their own message generated from their student's actual lesson & fee data.</div>
-            </div>
-          )}
         </div>
 
         {/* ── SEND BUTTONS ──────────────────────────────────── */}
@@ -2338,7 +2346,7 @@ export default function TutorPulse() {
                   )}
                 </>
               ) : (
-                <Button variant="success" icon="check" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setMsgActiveTemplate(null); }}>All Done!</Button>
+                <Button variant="success" icon="check" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); }}>All Done!</Button>
               );
             })()
           ) : (
@@ -2354,7 +2362,7 @@ export default function TutorPulse() {
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><WAIcon /> Send via WhatsApp</span>
             </button>
           )}
-          <Button variant="secondary" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setMsgActiveTemplate(null); }} style={{ flex: "0 0 auto" }}>Cancel</Button>
+          <Button variant="secondary" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); }} style={{ flex: "0 0 auto" }}>Cancel</Button>
         </div>
         {!isBulk && student && (
           <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8, textAlign: "center" }}>Opens WhatsApp with {student.parent}'s number ({student.parentPhone}) pre-filled</div>
@@ -2826,8 +2834,12 @@ export default function TutorPulse() {
           const resolvedSubs = (studentEditForm.subjects || []).map(e => ({
             subject: e.subject === "Other" ? (e.subjectOther || "Other") : (["Combined Science", "Combined Humanities"].includes(e.subject) && e.subjectOther ? e.subject + " (" + e.subjectOther + ")" : e.subject),
             stream: e.stream === "Other" ? (e.streamOther || "Other") : e.stream,
+            grade: e.gradeCurrent || e.grade || "",
+            gradeStart: e.gradeStart || e.grade || "",
+            gradeCurrent: e.gradeCurrent || e.grade || "",
+            assessments: (e.assessments || []).filter(a => a.label || a.grade),
           }));
-          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeStart: studentEditForm.gradeStart, gradeCurrent: studentEditForm.gradeCurrent, gradeHistory: (studentEditForm.gradeHistory || []).filter(g => g.label || g.grade), avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeCurrent: resolvedSubs[0]?.gradeCurrent || "", gradeStart: resolvedSubs[0]?.gradeStart || "", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
           updateStudent(selectedStudent.id, u); setSelectedStudent({ ...selectedStudent, ...u }); setEditingStudent(false); addToast("Student updated");
         };
         const uf = (k, v) => setStudentEditForm((f) => ({ ...f, [k]: v }));
@@ -2848,32 +2860,35 @@ export default function TutorPulse() {
                   {selectedStudent.address && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>{selectedStudent.address}</div>}
                 </Card>
                 {selectedStudent.notes && (<Card style={{ marginBottom: 12, padding: 14, borderLeft: "3px solid " + theme.accent }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>NOTES</div><div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.notes}</div></Card>)}
-                {/* Grade Tracking */}
+                {/* Grade Tracking — per subject */}
                 <Card style={{ marginBottom: 12, padding: 14 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>GRADE TRACKING</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
-                    <div style={{ flex: 1, padding: 10, background: theme.bgInput, borderRadius: 8, textAlign: "center" }}>
-                      <div style={{ fontSize: 10, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>STARTING</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: theme.textSecondary }}>{selectedStudent.gradeStart || "—"}</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", color: theme.textMuted }}>→</div>
-                    <div style={{ flex: 1, padding: 10, background: theme.bgInput, borderRadius: 8, textAlign: "center" }}>
-                      <div style={{ fontSize: 10, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>CURRENT</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: theme.accent }}>{selectedStudent.gradeCurrent || "—"}</div>
-                    </div>
-                  </div>
-                  {selectedStudent.gradeHistory && selectedStudent.gradeHistory.length > 0 && (
-                    <div style={{ borderTop: "1px solid " + theme.border, paddingTop: 8, marginTop: 4 }}>
-                      {selectedStudent.gradeHistory.map((g, i) => (
-                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: theme.textSecondary, padding: "3px 0" }}>
-                          <span>{g.label}</span><span style={{ fontWeight: 600 }}>{g.grade}</span>
+                  <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5, marginBottom: 10 }}>GRADE TRACKING</div>
+                  {(selectedStudent.subjects || [{ subject: selectedStudent.subject || "Subject", stream: selectedStudent.stream || "", grade: selectedStudent.gradeCurrent || "" }]).map((sub, si) => (
+                    <div key={si} style={{ marginBottom: si < (selectedStudent.subjects || []).length - 1 ? 12 : 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: theme.text, marginBottom: 6 }}>{sub.subject}{sub.stream ? " (" + sub.stream + ")" : ""}</div>
+                      <div style={{ display: "flex", gap: 10, marginBottom: 6 }}>
+                        <div style={{ flex: 1, padding: 8, background: theme.bgInput, borderRadius: 8, textAlign: "center" }}>
+                          <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>STARTING</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: theme.textSecondary }}>{sub.gradeStart || sub.grade || "—"}</div>
                         </div>
-                      ))}
+                        <div style={{ display: "flex", alignItems: "center", color: theme.textMuted, fontSize: 12 }}>→</div>
+                        <div style={{ flex: 1, padding: 8, background: theme.bgInput, borderRadius: 8, textAlign: "center" }}>
+                          <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>CURRENT</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: theme.accent }}>{sub.gradeCurrent || sub.grade || "—"}</div>
+                        </div>
+                      </div>
+                      {sub.assessments && sub.assessments.length > 0 && (
+                        <div style={{ paddingLeft: 4 }}>
+                          {sub.assessments.map((a, ai) => (
+                            <div key={ai} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: theme.textSecondary, padding: "2px 0" }}>
+                              <span>{a.label}</span><span style={{ fontWeight: 600 }}>{a.grade}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Edit grades via Edit Details</div>
+                  ))}
+                  <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8 }}>Edit grades via Edit Details</div>
                 </Card>
               </>
             ) : (
@@ -2894,7 +2909,19 @@ export default function TutorPulse() {
                     </div>
                     {(entry.subject === "Combined Science" || entry.subject === "Combined Humanities" || entry.subject === "Other") && (<Input label={entry.subject === "Other" ? "Subject Name" : "Combination"} value={entry.subjectOther || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], subjectOther: v }; uf("subjects", subs); }} />)}
                     {entry.stream === "Other" && (<Input label="Stream Name" value={entry.streamOther || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], streamOther: v }; uf("subjects", subs); }} />)}
-                    <Input label="Current Grade" value={entry.grade || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], grade: v }; uf("subjects", subs); }} placeholder="e.g. A2, B3" />
+                    <Input label="Current Grade" value={entry.grade || entry.gradeCurrent || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], grade: v, gradeCurrent: v }; uf("subjects", subs); }} placeholder="e.g. A2, B3" />
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <Input label="Starting Grade" value={entry.gradeStart || entry.grade || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], gradeStart: v }; uf("subjects", subs); }} placeholder="e.g. C5" />
+                      <div />
+                    </div>
+                    {(entry.assessments || []).map((a, ai) => (
+                      <div key={ai} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
+                        <input defaultValue={a.label} onBlur={(e) => { const subs = [...(studentEditForm.subjects || [])]; const asms = [...(subs[idx].assessments || [])]; asms[ai] = { ...asms[ai], label: e.target.value }; subs[idx] = { ...subs[idx], assessments: asms }; uf("subjects", subs); }} placeholder="e.g. WA1, CA1, SA1" style={{ flex: 1, padding: "5px 8px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 6, color: theme.text, outline: "none", fontSize: 11, fontFamily: "'DM Sans', sans-serif" }} />
+                        <input defaultValue={a.grade} onBlur={(e) => { const subs = [...(studentEditForm.subjects || [])]; const asms = [...(subs[idx].assessments || [])]; asms[ai] = { ...asms[ai], grade: e.target.value }; subs[idx] = { ...subs[idx], assessments: asms }; uf("subjects", subs); }} placeholder="Grade" style={{ width: 50, padding: "5px 8px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 6, color: theme.text, outline: "none", fontSize: 11, fontFamily: "'DM Sans', sans-serif", textAlign: "center" }} />
+                        <button onClick={() => { const subs = [...(studentEditForm.subjects || [])]; const asms = (subs[idx].assessments || []).filter((_, j) => j !== ai); subs[idx] = { ...subs[idx], assessments: asms }; uf("subjects", subs); }} style={{ background: "none", border: "none", color: theme.danger, fontSize: 13, cursor: "pointer" }}>×</button>
+                      </div>
+                    ))}
+                    <button onClick={() => { const subs = [...(studentEditForm.subjects || [])]; const asms = [...(subs[idx].assessments || []), { label: "", grade: "" }]; subs[idx] = { ...subs[idx], assessments: asms }; uf("subjects", subs); }} style={{ padding: "3px 8px", borderRadius: 4, border: "1px dashed " + theme.border, background: "transparent", color: theme.textMuted, fontSize: 10, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>+ Add Assessment</button>
                   </div>
                 ))}
                 <button onClick={() => { const subs = [...(studentEditForm.subjects || [{ subject: "Chinese", subjectOther: "", stream: "Standard", streamOther: "" }]), { subject: "English", subjectOther: "", stream: "Standard", streamOther: "" }]; uf("subjects", subs); }} style={{ padding: "5px 10px", borderRadius: 6, border: "1px dashed " + theme.border, background: "transparent", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 10, width: "100%" }}>+ Add Subject</button>
