@@ -497,7 +497,7 @@ export default function TutorPulse() {
     const [y, mo] = monthStr.split("-").map(Number);
     const lessons = store.lessons.filter((l) => {
       const d = new Date(l.date);
-      return l.studentId === studentId && d.getFullYear() === y && d.getMonth() === mo - 1 && l.status !== "cancelled" && !l.excludeFromBilling;
+      return l.studentId === studentId && d.getFullYear() === y && d.getMonth() === mo - 1 && (l.status !== "cancelled" || l.collectedButCancelled) && !l.excludeFromBilling;
     });
     const totalMinutes = lessons.reduce((sum, l) => sum + l.duration, 0);
     const totalHours = totalMinutes / 60;
@@ -564,7 +564,7 @@ export default function TutorPulse() {
       // Build rich context with actual data
       const studentDetails = store.students.map(s => {
         const lessons = store.lessons.filter(l => l.studentId === s.id);
-        const monthLessons = lessons.filter(l => { const d = new Date(l.date); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === currentMonth && l.status !== "cancelled" && !l.excludeFromBilling; });
+        const monthLessons = lessons.filter(l => { const d = new Date(l.date); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === currentMonth && (l.status !== "cancelled" || l.collectedButCancelled) && !l.excludeFromBilling; });
         const totalHours = monthLessons.reduce((sum, l) => sum + l.duration, 0) / 60;
         const fee = Math.round(s.hourlyRate * totalHours * 100) / 100;
         const paid = store.payments.find(p => p.studentId === s.id && p.month === currentMonth && p.status === "paid");
@@ -643,7 +643,7 @@ export default function TutorPulse() {
           pendingPayments.forEach(sid => {
             const s = getStudent(sid);
             if (s && s.paymentMode === "per_lesson") {
-              count += store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === sid && d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === cm && l.status !== "cancelled" && !l.excludeFromBilling && !store.payments.find(p => p.studentId === sid && p.month === cm && p.lessonId === l.id && p.status === "paid"); }).length;
+              count += store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === sid && d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === cm && (l.status !== "cancelled" || l.collectedButCancelled) && !l.excludeFromBilling && !store.payments.find(p => p.studentId === sid && p.month === cm && p.lessonId === l.id && p.status === "paid"); }).length;
             } else { count++; }
           });
           return count + " unpaid";
@@ -982,19 +982,20 @@ export default function TutorPulse() {
           const lessons = store.lessons.filter(l => {
             const d = new Date(l.date);
             const lMonth = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
-            return l.studentId === sid && lMonth === monthView && l.status !== "cancelled" && !l.excludeFromBilling;
+            return l.studentId === sid && lMonth === monthView && (l.status !== "cancelled" || l.collectedButCancelled) && !l.excludeFromBilling;
           }).sort((a, b) => new Date(a.date) - new Date(b.date));
           lessons.forEach(l => {
             const hours = l.duration / 60;
             const amount = Math.round((s.hourlyRate || 0) * hours * 100) / 100;
             const paidRecord = store.payments.find(p => p.studentId === sid && p.month === monthView && p.lessonId === l.id);
+            const isCBC = l.status === "cancelled" && l.collectedButCancelled;
             entries.push({
               id: paidRecord ? paidRecord.id : "auto-" + l.id + "-" + monthView,
               studentId: sid, month: monthView, lessonId: l.id,
               amount: amount, sessions: 1, rate: s.hourlyRate, totalHours: hours,
-              status: paidRecord ? paidRecord.status : "pending",
+              status: isCBC ? "paid" : (paidRecord ? paidRecord.status : "pending"),
               paidDate: paidRecord ? paidRecord.paidDate : null, method: paidRecord ? paidRecord.method : null,
-              isPerLesson: true, lessonDate: l.date, lessonSubject: l.subject,
+              isPerLesson: true, lessonDate: l.date, lessonSubject: l.subject, isCBC: isCBC,
             });
           });
         } else {
@@ -1126,9 +1127,9 @@ export default function TutorPulse() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{student ? student.name : "Unknown"}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      <Badge text={payment.status} color={getStatusColor(payment.status)} bg={getStatusBg(payment.status)} />
+                      <Badge text={payment.isCBC ? "CBC" : payment.status} color={payment.isCBC ? theme.warning : getStatusColor(payment.status)} bg={payment.isCBC ? theme.warningBg : getStatusBg(payment.status)} />
                       {payment.isPerLesson ? (
-                        <span style={{ fontSize: 11, color: theme.textMuted }}>{new Date(payment.lessonDate).toLocaleDateString("en-SG", { day: "numeric", month: "short" })} · {payment.lessonSubject} · {payment.totalHours}h × ${payment.rate}/hr</span>
+                        <span style={{ fontSize: 11, color: theme.textMuted }}>{new Date(payment.lessonDate).toLocaleDateString("en-SG", { day: "numeric", month: "short" })} · {payment.lessonSubject}{payment.isCBC ? " (cancelled)" : ""} · {payment.totalHours}h × ${payment.rate}/hr</span>
                       ) : (
                         <span style={{ fontSize: 11, color: theme.textMuted }}>{payment.sessions} sessions · {payment.totalHours}h × ${payment.rate}/hr</span>
                       )}
@@ -1917,7 +1918,7 @@ export default function TutorPulse() {
 
       const monthLessons = store.lessons.filter((l) => {
         const d = new Date(l.date);
-        return l.studentId === sid && d.getMonth() === invMonth - 1 && d.getFullYear() === invYear && l.status !== "cancelled" && !l.excludeFromBilling;
+        return l.studentId === sid && d.getMonth() === invMonth - 1 && d.getFullYear() === invYear && (l.status !== "cancelled" || l.collectedButCancelled) && !l.excludeFromBilling;
       }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
       const totalSessions = monthLessons.length;
@@ -3108,7 +3109,7 @@ export default function TutorPulse() {
                   {bulkDeleteMode && (<div data-cb="1" style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + theme.borderLight, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}></div>)}
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}{l.waiveFee && <span style={{ fontSize: 10, color: theme.purple, marginLeft: 6 }}>WAIVED{l.waiveReason ? " · " + l.waiveReason : ""}{l.waiveReason === "Other" && l.waiveNote ? ": " + l.waiveNote : ""}</span>}{l.collectedButCancelled && <span style={{ fontSize: 10, color: theme.warning, marginLeft: 6 }}>CBC</span>}{l.excludeFromBilling && !l.waiveFee && <span style={{ fontSize: 10, color: theme.danger, marginLeft: 6 }}>EXCL</span>}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div></div>
+                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}{l.waiveFee && <span style={{ fontSize: 10, color: theme.purple, marginLeft: 6 }}>WAIVED{l.waiveReason ? " · " + l.waiveReason : ""}{l.waiveReason === "Other" && l.waiveNote ? ": " + l.waiveNote : ""}</span>}{l.collectedButCancelled && <span style={{ fontSize: 10, color: theme.warning, marginLeft: 6 }}>CBC</span>}{l.status === "cancelled" && l.cancelReason && <span style={{ fontSize: 10, color: theme.danger, marginLeft: 6 }}>{l.cancelReason}{l.cancelReason === "Other" && l.cancelNote ? ": " + l.cancelNote : ""}</span>}{l.excludeFromBilling && !l.waiveFee && <span style={{ fontSize: 10, color: theme.danger, marginLeft: 6 }}>EXCL</span>}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div></div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}><Badge text={l.status} color={getStatusColor(l.status)} bg={getStatusBg(l.status)} />{!bulkDeleteMode && <Icon name="chevRight" size={14} color={theme.textMuted} />}</div>
                     </div>
                     {l.comment && (<div style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 8, borderLeft: "2px solid " + theme.borderLight }}>{l.comment}</div>)}
