@@ -583,7 +583,17 @@ export default function TutorPulse() {
       <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4, alignItems: "stretch" }}>
         <div onClick={() => setPage("students")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} /></div>
         <div onClick={() => setPage("schedule")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={(() => { const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1); const tmrCount = store.lessons.filter(l => { const d = new Date(l.date); return d.getDate() === tmr.getDate() && d.getMonth() === tmr.getMonth() && d.getFullYear() === tmr.getFullYear() && l.status !== "cancelled"; }).length; return tmrCount + " tomorrow"; })()} color={theme.info} /></div>
-        <div onClick={() => setPage("payments")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={`${pendingPayments.length} unpaid`} color={theme.success} /></div>
+        <div onClick={() => setPage("payments")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={(() => {
+          const cm = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+          let count = 0;
+          pendingPayments.forEach(sid => {
+            const s = getStudent(sid);
+            if (s && s.paymentMode === "per_lesson") {
+              count += store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === sid && d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === cm && l.status !== "cancelled" && !l.excludeFromBilling && !store.payments.find(p => p.studentId === sid && p.month === cm && p.lessonId === l.id && p.status === "paid"); }).length;
+            } else { count++; }
+          });
+          return count + " unpaid";
+        })()} color={theme.success} /></div>
       </div>
 
       {/* Today's Schedule */}
@@ -1432,23 +1442,25 @@ export default function TutorPulse() {
                     const wb = XLSX.utils.book_new();
                     // Template with example row
                     const data = [
-                      { Name: "John Tan", Level: "Sec 3", Subject: "Chinese", Stream: "G3", Grade: "B3", Status: "active", "Hourly Rate": 70, Parent: "Mrs. Tan", Phone: "+65 91234567", Email: "tan@email.com", Address: "123 Tampines St 11", "Join Date": "2025-01-15", Notes: "Example — delete these rows" },
-                      { Name: "John Tan", Level: "Sec 3", Subject: "E Math", Stream: "Standard", Grade: "C5", Status: "active", "Hourly Rate": 70, Parent: "Mrs. Tan", Phone: "+65 91234567", Email: "tan@email.com", Address: "123 Tampines St 11", "Join Date": "2025-01-15", Notes: "Same student, 2nd subject" },
+                      { Name: "John Tan", Level: "Sec 3", Subject: "Chinese", "Subject Detail": "", Stream: "G3", "Stream Detail": "", "Starting Grade": "B3", Status: "active", "Payment Mode": "monthly", "Hourly Rate": 70, Parent: "Mrs. Tan", Phone: "+65 91234567", Email: "tan@email.com", Address: "123 Tampines St 11", "Join Date": "2025-01-15", Notes: "Example — delete these rows" },
+                      { Name: "John Tan", Level: "Sec 3", Subject: "Combined Science", "Subject Detail": "Physics/Chemistry", Stream: "Standard", "Stream Detail": "", "Starting Grade": "C5", Status: "active", "Payment Mode": "monthly", "Hourly Rate": 70, Parent: "Mrs. Tan", Phone: "+65 91234567", Email: "tan@email.com", Address: "123 Tampines St 11", "Join Date": "2025-01-15", Notes: "Same student, 2nd subject" },
+                      { Name: "Jane Lim", Level: "Sec 2", Subject: "Other", "Subject Detail": "Art", Stream: "Other", "Stream Detail": "IP", "Starting Grade": "", Status: "active", "Payment Mode": "per_lesson", "Hourly Rate": 80, Parent: "Mr. Lim", Phone: "+65 92345678", Email: "lim@email.com", Address: "", "Join Date": "2025-03-01", Notes: "Use Subject/Stream Detail for custom values" },
                     ];
                     const ws = XLSX.utils.json_to_sheet(data);
-                    ws["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 28 }, { wch: 12 }, { wch: 30 }];
+                    ws["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 20 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 28 }, { wch: 12 }, { wch: 30 }];
                     // Reference data
                     const levels = ["P1","P2","P3","P4","P5","P6","Sec 1","Sec 2","Sec 3","Sec 4","Sec 5","JC 1","JC 2","Other"];
                     const subjects = ["English","Chinese","E Math","A Math","Physics","Chemistry","Biology","Combined Science","Geography","History","Literature","Combined Humanities","Food and Nutrition","Design and Technology","Other"];
                     const streams = ["Foundation","Standard","Higher","G1","G2","G3","H1","H2","H3","Other"];
                     const statuses = ["active","trial","paused","graduated"];
+                    const payModes = ["monthly","per_lesson"];
                     const maxLen = Math.max(levels.length, subjects.length, streams.length, statuses.length);
                     const refData = [];
                     for (let i = 0; i < maxLen; i++) {
-                      refData.push({ "Valid Levels": levels[i] || "", "Valid Subjects": subjects[i] || "", "Valid Streams": streams[i] || "", "Valid Statuses": statuses[i] || "" });
+                      refData.push({ "Valid Levels": levels[i] || "", "Valid Subjects": subjects[i] || "", "Valid Streams": streams[i] || "", "Valid Statuses": statuses[i] || "", "Valid Payment Modes": payModes[i] || "" });
                     }
                     const refWs = XLSX.utils.json_to_sheet(refData);
-                    refWs["!cols"] = [{ wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 14 }];
+                    refWs["!cols"] = [{ wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 20 }];
                     XLSX.utils.book_append_sheet(wb, ws, "Students");
                     XLSX.utils.book_append_sheet(wb, refWs, "Valid Values");
                     XLSX.writeFile(wb, "tutorpulse-student-template.xlsx");
@@ -1483,34 +1495,41 @@ export default function TutorPulse() {
                             if (r && r.length >= 1 && String(r[0] || "").trim()) rows.push(r.map(c => String(c || "").trim()));
                           }
                         }
-                        // Columns: Name, Level, Subject, Stream, Grade, Status, Hourly Rate, Parent, Phone, Email, Address, Join Date, Notes
+                        // Columns: Name(0), Level(1), Subject(2), Subject Detail(3), Stream(4), Stream Detail(5), Starting Grade(6), Status(7), Payment Mode(8), Hourly Rate(9), Parent(10), Phone(11), Email(12), Address(13), Join Date(14), Notes(15)
                         const studentMap = {};
                         rows.forEach(cols => {
                           const name = cols[0] || "";
                           if (!name) return;
-                          const subject = cols[2] || "Chinese";
-                          const stream = cols[3] || "Standard";
-                          const grade = cols[4] || "";
+                          let subject = cols[2] || "Chinese";
+                          const subjectDetail = cols[3] || "";
+                          let stream = cols[4] || "Standard";
+                          const streamDetail = cols[5] || "";
+                          const grade = cols[6] || "";
+                          // Resolve: if subject is "Other", use detail; if Combined, append detail
+                          if (subject === "Other" && subjectDetail) subject = subjectDetail;
+                          else if ((subject === "Combined Science" || subject === "Combined Humanities") && subjectDetail) subject = subject + " (" + subjectDetail + ")";
+                          if (stream === "Other" && streamDetail) stream = streamDetail;
                           if (!studentMap[name]) {
                             studentMap[name] = {
                               name, level: cols[1] || "Sec 1",
                               subjects: [],
-                              status: (cols[5] || "active").toLowerCase(),
-                              hourlyRate: parseFloat(cols[6]) || 70,
-                              parent: cols[7] || "", parentPhone: cols[8] || "", parentEmail: cols[9] || "",
-                              address: cols[10] || "",
-                              joinDate: cols[11] || new Date().toISOString().split("T")[0],
-                              notes: cols[12] || "",
+                              status: (cols[7] || "active").toLowerCase(),
+                              paymentMode: (cols[8] || "monthly").toLowerCase(),
+                              hourlyRate: parseFloat(cols[9]) || 70,
+                              parent: cols[10] || "", parentPhone: cols[11] || "", parentEmail: cols[12] || "",
+                              address: cols[13] || "",
+                              joinDate: cols[14] || new Date().toISOString().split("T")[0],
+                              notes: cols[15] || "",
                             };
                           }
-                          studentMap[name].subjects.push({ subject, subjectOther: "", stream, streamOther: "", grade });
+                          studentMap[name].subjects.push({ subject, subjectOther: subjectDetail, stream, streamOther: streamDetail, grade });
                         });
                         const newStudents = Object.values(studentMap).map(s => ({
                           id: "s" + genId(),
                           name: s.name, level: s.level,
                           subjects: s.subjects,
                           subject: s.subjects[0].subject, stream: s.subjects[0].stream,
-                          status: s.status, hourlyRate: s.hourlyRate,
+                          status: s.status, paymentMode: s.paymentMode || "monthly", hourlyRate: s.hourlyRate,
                           parent: s.parent, parentPhone: s.parentPhone, parentEmail: s.parentEmail,
                           address: s.address || "",
                           joinDate: s.joinDate, notes: s.notes,
@@ -1646,6 +1665,7 @@ export default function TutorPulse() {
       date: d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"),
       time: String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"),
       duration: String(selectedLesson.duration),
+      customDuration: String(selectedLesson.duration),
       subject: selectedLesson.subject,
       location: selectedLesson.location,
     });
@@ -1654,7 +1674,8 @@ export default function TutorPulse() {
 
   const saveLessonEdit = () => {
     const dateTime = new Date(lessonEdit.date + "T" + lessonEdit.time + ":00");
-    const updates = { date: dateTime.toISOString(), duration: parseInt(lessonEdit.duration), subject: lessonEdit.subject, location: lessonEdit.location };
+    const dur = lessonEdit.duration === "other" ? (parseInt(lessonEdit.customDuration) || selectedLesson.duration) : parseInt(lessonEdit.duration);
+    const updates = { date: dateTime.toISOString(), duration: dur, subject: lessonEdit.subject, location: lessonEdit.location };
     updateLesson(selectedLesson.id, updates);
     setSelectedLesson({ ...selectedLesson, ...updates });
     setEditingLesson(false);
@@ -1777,6 +1798,9 @@ export default function TutorPulse() {
 
   const MessageComposeModal = () => {
     const generating = msgGenerating; const setGenerating = setMsgGenerating;
+    const activeTemplate = msgActiveTemplate; const setActiveTemplate = setMsgActiveTemplate;
+    const isBulk = showMessageCompose === "bulk";
+    const student = !isBulk ? getStudent(showMessageCompose) : null;
     const [bulkSentIndex, setBulkSentIndex] = useState(-1);
     const [bulkSelected, setBulkSelected] = useState(new Set());
     const [bulkPreviewIdx, setBulkPreviewIdx] = useState(null);
@@ -1787,9 +1811,6 @@ export default function TutorPulse() {
         setBulkSelected(new Set(bulkRecipients.map((_, i) => i)));
       }
     }, [isBulk, bulkRecipients.length]);
-    const activeTemplate = msgActiveTemplate; const setActiveTemplate = setMsgActiveTemplate;
-    const isBulk = showMessageCompose === "bulk";
-    const student = !isBulk ? getStudent(showMessageCompose) : null;
 
     // ── Build lesson & fee data for a given student ──────────
     const buildStudentInvoice = useCallback((sid) => {
@@ -2039,10 +2060,12 @@ export default function TutorPulse() {
       if (!isBulk) return [];
       const currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
       return pendingPayments.map((sid) => {
-        const s = getStudent(sid);
-        if (!s) return null;
-        const calc = calcMonthlyFee(sid, currentMonth);
-        return { studentId: sid, studentName: s.name, parentName: s.parent, phone: s.parentPhone, amount: calc.total, sessions: calc.sessions, totalHours: calc.totalHours, rate: s.hourlyRate };
+        try {
+          const s = getStudent(sid);
+          if (!s) return null;
+          const calc = calcMonthlyFee(sid, currentMonth);
+          return { studentId: sid, studentName: s.name || "Unknown", parentName: s.parent || "Parent", phone: s.parentPhone || "", amount: calc.total || 0, sessions: calc.sessions || 0, totalHours: calc.totalHours || 0, rate: s.hourlyRate || 0 };
+        } catch (e) { return null; }
       }).filter(Boolean);
     }, [isBulk, pendingPayments, getStudent, calcMonthlyFee, now]);
 
@@ -2271,7 +2294,9 @@ export default function TutorPulse() {
             (() => {
               const selectedList = bulkRecipients.filter((_, i) => bulkSelected.has(i));
               const sentCount = bulkSentIndex + 1;
-              return sentCount < selectedList.length ? (
+              return selectedList.length === 0 ? (
+                <div style={{ fontSize: 13, color: theme.textMuted }}>Select at least one recipient above</div>
+              ) : sentCount < selectedList.length ? (
                 <>
                   <button onClick={() => {
                     const txt = getMsgText();
@@ -2319,9 +2344,10 @@ export default function TutorPulse() {
             <button onClick={() => {
               const txt = getMsgText();
               if (!txt.trim()) { addToast("Select a template or type a message", "error"); return; }
+              if (!student) { addToast("Student not found", "error"); return; }
               setStore((s) => ({ ...s, messages: [...s.messages, { id: "m" + genId(), parentId: showMessageCompose, direction: "out", text: txt, date: new Date().toISOString(), read: true }] }));
               openWhatsApp(student.parentPhone, txt);
-              addToast("WhatsApp opened for " + student.parent);
+              addToast("WhatsApp opened for " + (student.parent || "parent"));
               setShowMessageCompose(null); setMsgText(""); setMsgActiveTemplate(null);
             }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "14px 20px", borderRadius: 12, border: "none", background: "#25D366", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(37, 211, 102, 0.3)", whiteSpace: "nowrap", flex: 1, lineHeight: 1, minHeight: 48 }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><WAIcon /> Send via WhatsApp</span>
@@ -2534,7 +2560,7 @@ export default function TutorPulse() {
                 <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>DURATION</div><div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.duration} min</div></div>
                 <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>LOCATION</div><div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.location}</div></div>
               </div>
-              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, marginBottom: 16 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>SUBJECT</div><div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.subject}</div></div>
+              <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, marginBottom: 16 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>SUBJECT</div><div style={{ fontSize: 14, fontWeight: 600 }}>{(selectedLesson.subject || "").split(" — ")[0]}</div>{(selectedLesson.subject || "").includes(" — ") && <><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginTop: 8, marginBottom: 2 }}>TOPIC / FOCUS</div><div style={{ fontSize: 14, fontWeight: 600 }}>{(selectedLesson.subject || "").split(" — ").slice(1).join(" — ")}</div></>}</div>
             </>
           ) : (
             <>
@@ -2878,19 +2904,6 @@ export default function TutorPulse() {
                 <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
                 <Input label="Notes" value={studentEditForm.notes} onChange={(v) => uf("notes", v)} multiline />
                 {/* Grade Tracking */}
-                <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginTop: 8, marginBottom: 6, letterSpacing: 0.5 }}>GRADES</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <Input label="Starting Grade" value={studentEditForm.gradeStart || ""} onChange={(v) => uf("gradeStart", v)} placeholder="e.g. C5, B3" />
-                  <Input label="Current Grade" value={studentEditForm.gradeCurrent || ""} onChange={(v) => uf("gradeCurrent", v)} placeholder="e.g. A2, B4" />
-                </div>
-                {(studentEditForm.gradeHistory || []).map((g, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                    <input defaultValue={g.label} onBlur={(e) => { const h = [...(studentEditForm.gradeHistory || [])]; h[i] = { ...h[i], label: e.target.value }; uf("gradeHistory", h); }} placeholder="Assessment name" style={{ flex: 1, padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 6, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif" }} />
-                    <input defaultValue={g.grade} onBlur={(e) => { const h = [...(studentEditForm.gradeHistory || [])]; h[i] = { ...h[i], grade: e.target.value }; uf("gradeHistory", h); }} placeholder="Grade" style={{ width: 60, padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 6, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", textAlign: "center" }} />
-                    <button onClick={() => { const h = (studentEditForm.gradeHistory || []).filter((_, j) => j !== i); uf("gradeHistory", h); }} style={{ background: "none", border: "none", cursor: "pointer", color: theme.danger, fontSize: 14 }}>×</button>
-                  </div>
-                ))}
-                <button onClick={() => { uf("gradeHistory", [...(studentEditForm.gradeHistory || []), { label: "", grade: "" }]); }} style={{ padding: "4px 10px", borderRadius: 6, border: "1px dashed " + theme.border, background: "transparent", color: theme.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>+ Add Assessment</button>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}><Button size="sm" icon="check" onClick={saveEdit}>Save Changes</Button><Button size="sm" variant="secondary" onClick={() => setEditingStudent(false)}>Cancel</Button></div>
               </>
             )}
@@ -2958,3 +2971,4 @@ export default function TutorPulse() {
     </div>
   );
 }
+
