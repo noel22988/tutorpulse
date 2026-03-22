@@ -264,6 +264,29 @@ const Input = ({ label, value, onChange, type = "text", placeholder, style = {},
   </div>
 );
 
+const PhoneInput = ({ label, value, onChange, style = {} }) => {
+  // Parse existing value: "+65 91234567" or "6591234567" or "91234567"
+  const parsePhone = (v) => {
+    const raw = (v || "").replace(/[\s\-()]/g, "");
+    if (raw.startsWith("+")) { const code = raw.substring(1, raw.length - 8) || "65"; return { code, num: raw.slice(-8) }; }
+    if (raw.length > 8) { return { code: raw.substring(0, raw.length - 8), num: raw.slice(-8) }; }
+    return { code: "65", num: raw };
+  };
+  const { code, num } = parsePhone(value);
+  const update = (newCode, newNum) => onChange(newCode + newNum);
+  return (
+    <div style={{ marginBottom: 16, ...style }}>
+      {label && <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</label>}
+      <div style={{ display: "flex", gap: 6 }}>
+        <select value={code} onChange={(e) => update(e.target.value, num)} style={{ width: 72, padding: "10px 6px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, fontSize: 13, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
+          <option value="65">+65</option><option value="60">+60</option><option value="62">+62</option><option value="66">+66</option><option value="63">+63</option><option value="91">+91</option><option value="86">+86</option><option value="44">+44</option><option value="1">+1</option><option value="61">+61</option>
+        </select>
+        <input type="tel" value={num} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").substring(0, 8); update(code, v); }} placeholder="9XXX XXXX" style={{ flex: 1, padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+      </div>
+    </div>
+  );
+};
+
 const Select = ({ label, value, onChange, options, style = {} }) => (
   <div style={{ marginBottom: 16, ...style }}>
     {label && <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</label>}
@@ -1776,12 +1799,24 @@ export default function TutorPulse() {
   // ── WhatsApp Helpers ─────────────────────────────────────────
   const formatPhoneForWA = (phone) => {
     // Strip all non-digits, ensure country code
-    let digits = phone.replace(/[^0-9]/g, "");
+    let digits = (phone || "").replace(/[^0-9]/g, "");
     // If starts with 9/8/6 and is 8 digits, prepend SG country code
     if (digits.length === 8 && /^[689]/.test(digits)) digits = "65" + digits;
     // If starts with 0, replace with 65
     if (digits.startsWith("0")) digits = "65" + digits.substring(1);
     return digits;
+  };
+
+  const formatPhoneDisplay = (phone) => {
+    const digits = formatPhoneForWA(phone);
+    if (!digits) return "";
+    // Format as "+CC XXXX XXXX"
+    if (digits.length > 8) {
+      const code = digits.substring(0, digits.length - 8);
+      const num = digits.slice(-8);
+      return "+" + code + " " + num.substring(0, 4) + " " + num.substring(4);
+    }
+    return "+" + digits;
   };
 
   const openWhatsApp = (phone, message) => {
@@ -2276,25 +2311,24 @@ export default function TutorPulse() {
             {getMsgText() && <span style={{ fontSize: 10, color: theme.textMuted }}>{getMsgText().length} chars</span>}
           </div>
           <textarea ref={msgTextRef} key={"msg-" + showMessageCompose} defaultValue={msgText} onBlur={(e) => { setMsgText(e.target.value); }} placeholder="Select a template above, or type your own..." rows={10} style={{ width: "100%", padding: "12px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", resize: "vertical", lineHeight: 1.6 }} />
-          {getMsgText() && (
-            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-              {["Chinese (中文)", "Malay", "Tamil"].map((lang) => (
-                <button key={lang} onClick={async () => {
-                  const currentTxt = getMsgText();
-                  setMsgGenerating(true);
-                  try {
-                    const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
-                    const data = await res.json();
-                    const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
-                    if (text) { setMsgText(text); addToast("Translated to " + lang.split(" (")[0]); }
-                  } catch (err) { addToast("Translation failed", "error"); }
-                  setMsgGenerating(false);
-                }} disabled={msgGenerating} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + theme.border, background: theme.bgElevated, color: theme.textSecondary, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                  Translate → {lang}
-                </button>
-              ))}
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            {["Chinese (中文)", "Malay", "Tamil"].map((lang) => (
+              <button key={lang} onClick={async () => {
+                const currentTxt = getMsgText();
+                if (!currentTxt) return;
+                setMsgGenerating(true);
+                try {
+                  const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
+                  const data = await res.json();
+                  const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
+                  if (text) { setMsgText(text); addToast("Translated to " + lang.split(" (")[0]); }
+                } catch (err) { addToast("Translation failed", "error"); }
+                setMsgGenerating(false);
+              }} disabled={msgGenerating || !getMsgText()} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + theme.border, background: theme.bgElevated, color: theme.textSecondary, fontSize: 11, fontWeight: 600, cursor: msgGenerating || !getMsgText() ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: getMsgText() ? 1 : 0.4 }}>
+                Translate → {lang}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── SEND BUTTONS ──────────────────────────────────── */}
@@ -2365,7 +2399,7 @@ export default function TutorPulse() {
           <Button variant="secondary" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); }} style={{ flex: "0 0 auto" }}>Cancel</Button>
         </div>
         {!isBulk && student && (
-          <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8, textAlign: "center" }}>Opens WhatsApp with {student.parent}'s number ({student.parentPhone}) pre-filled</div>
+          <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8, textAlign: "center" }}>Opens WhatsApp with {student.parent}'s number ({formatPhoneDisplay(student.parentPhone)}) pre-filled</div>
         )}
       </Modal>
     );
@@ -2798,9 +2832,10 @@ export default function TutorPulse() {
           <button onClick={() => { const subs = [...(newStudentForm.subjects || [{ subject: "Chinese", subjectOther: "", stream: "Standard", streamOther: "" }]), { subject: "English", subjectOther: "", stream: "Standard", streamOther: "" }]; updateNewStudentForm("subjects", subs); }} style={{ padding: "6px 12px", borderRadius: 8, border: "1px dashed " + theme.border, background: "transparent", color: theme.accent, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 12, width: "100%" }}>+ Add Another Subject</button>
           <Input label="Parent Name" value={newStudentForm.parent} onChange={(v) => updateNewStudentForm("parent", v)} placeholder="Parent/Guardian name" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Input label="Phone" value={newStudentForm.parentPhone} onChange={(v) => updateNewStudentForm("parentPhone", v)} placeholder="+65 9XXX XXXX" />
+            <PhoneInput label="Parent Phone" value={newStudentForm.parentPhone} onChange={(v) => updateNewStudentForm("parentPhone", v)} />
             <Input label="Email" value={newStudentForm.parentEmail} onChange={(v) => updateNewStudentForm("parentEmail", v)} placeholder="email@example.com" />
           </div>
+          <PhoneInput label="Student Phone (optional)" value={newStudentForm.studentPhone || ""} onChange={(v) => updateNewStudentForm("studentPhone", v)} />
           <Input label="Address" value={newStudentForm.address} onChange={(v) => updateNewStudentForm("address", v)} placeholder="Student's home address" />
           <Input label="Hourly Rate ($)" type="number" value={newStudentForm.hourlyRate} onChange={(v) => updateNewStudentForm("hourlyRate", v)} />
           <Input label="Notes" value={newStudentForm.notes} onChange={(v) => updateNewStudentForm("notes", v)} multiline placeholder="Any notes about the student..." />
@@ -2815,7 +2850,7 @@ export default function TutorPulse() {
               }));
               const firstGrade = subjects[0]?.grade || "";
               // For backward compat, also set subject/stream to first entry
-              addStudent({ name: newStudentForm.name, level: newStudentForm.level === "Other" ? (newStudentForm.levelOther || "Other") : newStudentForm.level, subjects: subjects, subject: subjects[0].subject, stream: subjects[0].stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, gradeCurrent: firstGrade, gradeStart: firstGrade, gradeHistory: [], status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
+              addStudent({ name: newStudentForm.name, level: newStudentForm.level === "Other" ? (newStudentForm.levelOther || "Other") : newStudentForm.level, subjects: subjects, subject: subjects[0].subject, stream: subjects[0].stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, studentPhone: newStudentForm.studentPhone || "", hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, gradeCurrent: firstGrade, gradeStart: firstGrade, gradeHistory: [], status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
               setNewStudentForm({ name: "", level: "P5", levelOther: "", subjects: [{ subject: "Chinese", subjectOther: "", stream: "Standard", streamOther: "" }], parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", gradeCurrent: "", notes: "" });
               setShowNewStudent(false);
             }}>Add Student</Button>
@@ -2827,7 +2862,7 @@ export default function TutorPulse() {
       {selectedStudent && (() => {
         const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
         const startEdit = () => {
-          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, levelOther: selectedStudent.levelOther || "", subjects: selectedStudent.subjects || [{ subject: selectedStudent.subject || "Chinese", subjectOther: "", stream: selectedStudent.stream || "Standard", streamOther: "" }], subject: selectedStudent.subject, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status, paymentMode: selectedStudent.paymentMode || "monthly", gradeStart: selectedStudent.gradeStart || "", gradeCurrent: selectedStudent.gradeCurrent || "", gradeHistory: selectedStudent.gradeHistory || [] });
+          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, levelOther: selectedStudent.levelOther || "", subjects: selectedStudent.subjects || [{ subject: selectedStudent.subject || "Chinese", subjectOther: "", stream: selectedStudent.stream || "Standard", streamOther: "" }], subject: selectedStudent.subject, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, studentPhone: selectedStudent.studentPhone || "", hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status, paymentMode: selectedStudent.paymentMode || "monthly", gradeStart: selectedStudent.gradeStart || "", gradeCurrent: selectedStudent.gradeCurrent || "", gradeHistory: selectedStudent.gradeHistory || [] });
           setEditingStudent(true);
         };
         const saveEdit = () => {
@@ -2839,7 +2874,7 @@ export default function TutorPulse() {
             gradeCurrent: e.gradeCurrent || e.grade || "",
             assessments: (e.assessments || []).filter(a => a.label || a.grade),
           }));
-          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeCurrent: resolvedSubs[0]?.gradeCurrent || "", gradeStart: resolvedSubs[0]?.gradeStart || "", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, studentPhone: studentEditForm.studentPhone || "", hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeCurrent: resolvedSubs[0]?.gradeCurrent || "", gradeStart: resolvedSubs[0]?.gradeStart || "", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
           updateStudent(selectedStudent.id, u); setSelectedStudent({ ...selectedStudent, ...u }); setEditingStudent(false); addToast("Student updated");
         };
         const uf = (k, v) => setStudentEditForm((f) => ({ ...f, [k]: v }));
@@ -2855,9 +2890,16 @@ export default function TutorPulse() {
                 <Card style={{ marginBottom: 12, padding: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>PARENT / GUARDIAN</div><button onClick={startEdit} style={{ background: "none", border: "none", cursor: "pointer", color: theme.accent, fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 3 }}><Icon name="edit" size={12} color={theme.accent} /> Edit</button></div>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedStudent.parent}</div>
-                  <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentPhone}</div>
+                  <div style={{ fontSize: 13, color: theme.textSecondary }}>{formatPhoneDisplay(selectedStudent.parentPhone)}</div>
                   <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentEmail}</div>
+                  {selectedStudent.studentPhone && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>Student: {formatPhoneDisplay(selectedStudent.studentPhone)}</div>}
                   {selectedStudent.address && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>{selectedStudent.address}</div>}
+                  {selectedStudent.studentPhone && (
+                    <button onClick={() => { openWhatsApp(selectedStudent.studentPhone, ""); }} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "'DM Sans', sans-serif" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                      Message Student
+                    </button>
+                  )}
                 </Card>
                 {selectedStudent.notes && (<Card style={{ marginBottom: 12, padding: 14, borderLeft: "3px solid " + theme.accent }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>NOTES</div><div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.notes}</div></Card>)}
                 {/* Grade Tracking — per subject */}
@@ -2909,10 +2951,9 @@ export default function TutorPulse() {
                     </div>
                     {(entry.subject === "Combined Science" || entry.subject === "Combined Humanities" || entry.subject === "Other") && (<Input label={entry.subject === "Other" ? "Subject Name" : "Combination"} value={entry.subjectOther || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], subjectOther: v }; uf("subjects", subs); }} />)}
                     {entry.stream === "Other" && (<Input label="Stream Name" value={entry.streamOther || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], streamOther: v }; uf("subjects", subs); }} />)}
-                    <Input label="Current Grade" value={entry.grade || entry.gradeCurrent || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], grade: v, gradeCurrent: v }; uf("subjects", subs); }} placeholder="e.g. A2, B3" />
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <Input label="Starting Grade" value={entry.gradeStart || entry.grade || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], gradeStart: v }; uf("subjects", subs); }} placeholder="e.g. C5" />
-                      <div />
+                      <Input label="Starting Grade" value={entry.gradeStart || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], gradeStart: v }; uf("subjects", subs); }} placeholder="e.g. C5" />
+                      <Input label="Current Grade" value={entry.gradeCurrent || ""} onChange={(v) => { const subs = [...(studentEditForm.subjects || [])]; subs[idx] = { ...subs[idx], gradeCurrent: v, grade: v }; uf("subjects", subs); }} placeholder="e.g. A2" />
                     </div>
                     {(entry.assessments || []).map((a, ai) => (
                       <div key={ai} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
@@ -2926,7 +2967,8 @@ export default function TutorPulse() {
                 ))}
                 <button onClick={() => { const subs = [...(studentEditForm.subjects || [{ subject: "Chinese", subjectOther: "", stream: "Standard", streamOther: "" }]), { subject: "English", subjectOther: "", stream: "Standard", streamOther: "" }]; uf("subjects", subs); }} style={{ padding: "5px 10px", borderRadius: 6, border: "1px dashed " + theme.border, background: "transparent", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 10, width: "100%" }}>+ Add Subject</button>
                 <Input label="Parent Name" value={studentEditForm.parent} onChange={(v) => uf("parent", v)} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Phone" value={studentEditForm.parentPhone} onChange={(v) => uf("parentPhone", v)} /><Input label="Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><PhoneInput label="Parent Phone" value={studentEditForm.parentPhone} onChange={(v) => uf("parentPhone", v)} /><Input label="Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} /></div>
+                <PhoneInput label="Student Phone (optional)" value={studentEditForm.studentPhone || ""} onChange={(v) => uf("studentPhone", v)} />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }, { value: "graduated", label: "Graduated" }]} /></div>
                 <Select label="Payment Mode" value={studentEditForm.paymentMode || "monthly"} onChange={(v) => uf("paymentMode", v)} options={[{ value: "monthly", label: "Monthly" }, { value: "per_lesson", label: "Per Lesson" }]} />
                 <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
