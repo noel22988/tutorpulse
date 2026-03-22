@@ -397,6 +397,7 @@ export default function TutorPulse() {
   const [newLessonForStudent, setNewLessonForStudent] = useState(null);
   const [showNewStudent, setShowNewStudent] = useState(false);
   const [showMessageCompose, setShowMessageCompose] = useState(null);
+  const [messageTarget, setMessageTarget] = useState("parent"); // "parent" or "student"
   const [showAI, setShowAI] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -923,7 +924,7 @@ export default function TutorPulse() {
                     <div style={{ fontSize: 11, color: theme.textMuted }}>/ hr</div>
                   </div>
                   {student.parentPhone && (
-                    <button onClick={(e) => { e.stopPropagation(); setShowMessageCompose(student.id); }} style={{ padding: "3px 8px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, fontFamily: "'DM Sans', sans-serif" }}>
+                    <button onClick={(e) => { e.stopPropagation(); setMessageTarget("parent"); setShowMessageCompose(student.id); }} style={{ padding: "3px 8px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, fontFamily: "'DM Sans', sans-serif" }}>
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                       WA
                     </button>
@@ -2245,16 +2246,21 @@ export default function TutorPulse() {
     );
 
     return (
-      <Modal open={!!showMessageCompose} onClose={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); }} title={isBulk ? "Fee Reminders via WhatsApp" : "WhatsApp " + (student ? student.parent : "")} width={540}>
+      <Modal open={!!showMessageCompose} onClose={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); setMessageTarget("parent"); }} title={isBulk ? "Fee Reminders via WhatsApp" : "WhatsApp " + (student ? (messageTarget === "student" ? student.name : student.parent) : "")} width={540}>
 
         {/* Single: parent card */}
         {!isBulk && student && (
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, background: theme.bgElevated, borderRadius: 12, marginBottom: 16, border: "1px solid " + theme.border }}>
             <Avatar initials={student.avatar} size={40} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{student.parent}</div>
-              <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.parentPhone} · {student.name} (${student.hourlyRate}/hr)</div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{messageTarget === "student" ? student.name : student.parent}</div>
+              <div style={{ fontSize: 12, color: theme.textSecondary }}>{formatPhoneDisplay(messageTarget === "student" ? student.studentPhone : student.parentPhone)} · {messageTarget === "student" ? "Student" : student.name} (${student.hourlyRate}/hr)</div>
             </div>
+            {student.studentPhone && student.parentPhone && (
+              <button onClick={() => setMessageTarget(messageTarget === "parent" ? "student" : "parent")} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid " + theme.border, background: theme.bgInput, color: theme.accent, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                → {messageTarget === "parent" ? "Student" : "Parent"}
+              </button>
+            )}
           </div>
         )}
 
@@ -2422,7 +2428,7 @@ export default function TutorPulse() {
               if (!txt.trim()) { addToast("Select a template or type a message", "error"); return; }
               if (!student) { addToast("Student not found", "error"); return; }
               setStore((s) => ({ ...s, messages: [...s.messages, { id: "m" + genId(), parentId: showMessageCompose, direction: "out", text: txt, date: new Date().toISOString(), read: true }] }));
-              openWhatsApp(student.parentPhone, txt);
+              openWhatsApp(messageTarget === "student" ? student.studentPhone : student.parentPhone, txt);
               addToast("WhatsApp opened for " + (student.parent || "parent"));
               setShowMessageCompose(null); setMsgText(""); setMsgActiveTemplate(null);
             }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "14px 20px", borderRadius: 12, border: "none", background: "#25D366", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(37, 211, 102, 0.3)", whiteSpace: "nowrap", flex: 1, lineHeight: 1, minHeight: 48 }}>
@@ -2432,7 +2438,7 @@ export default function TutorPulse() {
           <Button variant="secondary" onClick={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); }} style={{ flex: "0 0 auto" }}>Cancel</Button>
         </div>
         {!isBulk && student && (
-          <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8, textAlign: "center" }}>Opens WhatsApp with {student.parent}'s number ({formatPhoneDisplay(student.parentPhone)}) pre-filled</div>
+          <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8, textAlign: "center" }}>Opens WhatsApp with {messageTarget === "student" ? student.name : student.parent}'s number ({formatPhoneDisplay(messageTarget === "student" ? student.studentPhone : student.parentPhone)}) pre-filled</div>
         )}
       </Modal>
     );
@@ -2803,7 +2809,10 @@ export default function TutorPulse() {
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => { updateLesson(selectedLesson.id, { status: "confirmed" }); setSelectedLesson({ ...selectedLesson, status: "confirmed" }); addToast("Lesson reverted to confirmed"); }}>Revert to Confirmed</Button>
               )}
               <Button size="sm" variant="secondary" icon="edit" onClick={startLessonEdit}>Edit Lesson</Button>
-              <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); if (lessonDetailStudent) setShowMessageCompose(selectedLesson.studentId); }}>Message Parent</Button>
+              <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); setMessageTarget("parent"); if (lessonDetailStudent) setShowMessageCompose(selectedLesson.studentId); }}>Message Parent</Button>
+              {lessonDetailStudent && lessonDetailStudent.studentPhone && (
+                <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); setMessageTarget("student"); setShowMessageCompose(selectedLesson.studentId); }} style={{ color: "#25D366" }}>Message Student</Button>
+              )}
               <Button size="sm" variant="ghost" icon="trash" onClick={handleDeleteLesson} style={{ color: theme.danger }}>Delete</Button>
             </div>
           )}
@@ -2998,7 +3007,7 @@ export default function TutorPulse() {
                   {selectedStudent.studentPhone && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>Student: {formatPhoneDisplay(selectedStudent.studentPhone)}</div>}
                   {selectedStudent.address && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>{selectedStudent.address}</div>}
                   {selectedStudent.studentPhone && (
-                    <button onClick={() => { openWhatsApp(selectedStudent.studentPhone, ""); }} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "'DM Sans', sans-serif" }}>
+                    <button onClick={() => { setSelectedStudent(null); setMessageTarget("student"); setShowMessageCompose(selectedStudent.id); }} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "'DM Sans', sans-serif" }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                       Message Student
                     </button>
@@ -3127,7 +3136,10 @@ export default function TutorPulse() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button size="sm" icon="edit" variant="secondary" onClick={startEdit}>Edit Details</Button>
                 <Button size="sm" icon="calendar" onClick={() => { setPrefillStudentId(selectedStudent.id); setSelectedStudent(null); setShowNewLesson(true); }}>Schedule Lesson</Button>
-                <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setShowMessageCompose(selectedStudent.id); }}>Message Parent</Button>
+                <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setMessageTarget("parent"); setShowMessageCompose(selectedStudent.id); }}>Message Parent</Button>
+                {selectedStudent.studentPhone && (
+                  <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setMessageTarget("student"); setShowMessageCompose(selectedStudent.id); }} style={{ color: "#25D366" }}>Message Student</Button>
+                )}
                 <Button size="sm" variant="ghost" icon="trash" onClick={() => {
                   if (window.confirm("Delete " + selectedStudent.name + " and all their lessons? This cannot be undone.")) {
                     deleteStudent(selectedStudent.id);
