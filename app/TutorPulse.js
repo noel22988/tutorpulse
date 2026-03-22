@@ -268,8 +268,21 @@ const PhoneInput = ({ label, value, onChange, style = {} }) => {
   // Parse existing value: "+65 91234567" or "6591234567" or "91234567"
   const parsePhone = (v) => {
     const raw = (v || "").replace(/[\s\-()]/g, "");
-    if (raw.startsWith("+")) { const code = raw.substring(1, raw.length - 8) || "65"; return { code, num: raw.slice(-8) }; }
-    if (raw.length > 8) { return { code: raw.substring(0, raw.length - 8), num: raw.slice(-8) }; }
+    if (raw.startsWith("+")) {
+      // Try known country codes (longest first)
+      const codes = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234","65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52","1"];
+      const digits = raw.substring(1);
+      for (const c of codes) { if (digits.startsWith(c)) return { code: c, num: digits.substring(c.length) }; }
+      return { code: "65", num: digits };
+    }
+    // Bare digits — assume SG if 8 digits starting with 6/8/9
+    if (raw.length === 8 && /^[689]/.test(raw)) return { code: "65", num: raw };
+    // Otherwise try to split: known codes
+    const codes3 = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234"];
+    const codes2 = ["65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52"];
+    for (const c of codes3) { if (raw.startsWith(c) && raw.length > c.length + 4) return { code: c, num: raw.substring(c.length) }; }
+    for (const c of codes2) { if (raw.startsWith(c) && raw.length > c.length + 4) return { code: c, num: raw.substring(c.length) }; }
+    if (raw.startsWith("1") && raw.length === 11) return { code: "1", num: raw.substring(1) };
     return { code: "65", num: raw };
   };
   const { code, num } = parsePhone(value);
@@ -278,10 +291,14 @@ const PhoneInput = ({ label, value, onChange, style = {} }) => {
     <div style={{ marginBottom: 16, ...style }}>
       {label && <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</label>}
       <div style={{ display: "flex", gap: 6 }}>
-        <select value={code} onChange={(e) => update(e.target.value, num)} style={{ width: 72, padding: "10px 6px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, fontSize: 13, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
-          <option value="65">+65</option><option value="60">+60</option><option value="62">+62</option><option value="66">+66</option><option value="63">+63</option><option value="91">+91</option><option value="86">+86</option><option value="44">+44</option><option value="1">+1</option><option value="61">+61</option>
+        <select value={code} onChange={(e) => update(e.target.value, num)} style={{ width: 82, padding: "10px 4px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
+          <option value="65">🇸🇬 +65</option><option value="60">🇲🇾 +60</option><option value="62">🇮🇩 +62</option><option value="66">🇹🇭 +66</option><option value="63">🇵🇭 +63</option><option value="84">🇻🇳 +84</option><option value="95">🇲🇲 +95</option><option value="856">🇱🇦 +856</option><option value="855">🇰🇭 +855</option><option value="673">🇧🇳 +673</option>
+          <option value="91">🇮🇳 +91</option><option value="86">🇨🇳 +86</option><option value="852">🇭🇰 +852</option><option value="853">🇲🇴 +853</option><option value="886">🇹🇼 +886</option><option value="81">🇯🇵 +81</option><option value="82">🇰🇷 +82</option>
+          <option value="61">🇦🇺 +61</option><option value="64">🇳🇿 +64</option><option value="44">🇬🇧 +44</option><option value="1">🇺🇸 +1</option><option value="33">🇫🇷 +33</option><option value="49">🇩🇪 +49</option><option value="39">🇮🇹 +39</option><option value="34">🇪🇸 +34</option><option value="31">🇳🇱 +31</option><option value="46">🇸🇪 +46</option><option value="41">🇨🇭 +41</option>
+          <option value="971">🇦🇪 +971</option><option value="966">🇸🇦 +966</option><option value="974">🇶🇦 +974</option><option value="968">🇴🇲 +968</option><option value="973">🇧🇭 +973</option><option value="965">🇰🇼 +965</option>
+          <option value="27">🇿🇦 +27</option><option value="234">🇳🇬 +234</option><option value="254">🇰🇪 +254</option><option value="55">🇧🇷 +55</option><option value="52">🇲🇽 +52</option>
         </select>
-        <input type="tel" value={num} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").substring(0, 8); update(code, v); }} placeholder="9XXX XXXX" style={{ flex: 1, padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
+        <input type="tel" value={num} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").substring(0, 12); update(code, v); }} placeholder="Phone number" style={{ flex: 1, padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
       </div>
     </div>
   );
@@ -325,12 +342,26 @@ const EmptyState = ({ icon, title, sub }) => (
   </div>
 );
 
+const modalScrollPositions = {};
 const Modal = ({ open, onClose, title, children, width = 480 }) => {
-  const modalRef = useRef(null);
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !title) return;
+    // Restore scroll
+    if (modalScrollPositions[title]) el.scrollTop = modalScrollPositions[title];
+    const handler = () => { modalScrollPositions[title] = el.scrollTop; };
+    el.addEventListener("scroll", handler, { passive: true });
+    return () => el.removeEventListener("scroll", handler);
+  });
+  // Reset scroll tracking when modal closes
+  useEffect(() => {
+    if (!open && title) { delete modalScrollPositions[title]; }
+  }, [open, title]);
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={onClose}>
-      <div ref={modalRef} style={{ background: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: 20, width: "90%", maxWidth: width, maxHeight: "85vh", overflow: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+      <div ref={scrollRef} style={{ background: theme.bgCard, border: `1px solid ${theme.border}`, borderRadius: 20, width: "90%", maxWidth: width, maxHeight: "85vh", overflow: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: `1px solid ${theme.border}`, position: "sticky", top: 0, background: theme.bgCard, zIndex: 1, borderRadius: "20px 20px 0 0" }}>
           <h3 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{title}</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: theme.textMuted, padding: 4 }}><Icon name="x" size={20} /></button>
@@ -884,7 +915,7 @@ export default function TutorPulse() {
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{student.name}</span>
                     <Badge text={student.status} color={getStatusColor(student.status)} bg={getStatusBg(student.status)} />
                   </div>
-                  <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} · {student.subject || student.stream}</div>
+                  <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} · {(student.subjects || []).length > 0 ? student.subjects.map(s => s.subject + (s.stream ? " (" + s.stream + ")" : "")).join(", ") : (student.subject || student.stream || "")}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                   <div style={{ textAlign: "right" }}>
@@ -1809,13 +1840,13 @@ export default function TutorPulse() {
 
   const formatPhoneDisplay = (phone) => {
     const digits = formatPhoneForWA(phone);
-    if (!digits) return "";
-    // Format as "+CC XXXX XXXX"
-    if (digits.length > 8) {
-      const code = digits.substring(0, digits.length - 8);
-      const num = digits.slice(-8);
-      return "+" + code + " " + num.substring(0, 4) + " " + num.substring(4);
-    }
+    if (!digits || digits.length < 4) return phone || "";
+    // Find the country code by trying known codes
+    const codes3 = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234"];
+    const codes2 = ["65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52"];
+    for (const c of codes3) { if (digits.startsWith(c)) return "+" + c + " " + digits.substring(c.length); }
+    for (const c of codes2) { if (digits.startsWith(c)) return "+" + c + " " + digits.substring(c.length); }
+    if (digits.startsWith("1") && digits.length === 11) return "+1 " + digits.substring(1);
     return "+" + digits;
   };
 
@@ -1850,7 +1881,7 @@ export default function TutorPulse() {
   }, [msgText]);
 
   // Get current text from textarea ref (live) or state (fallback)
-  const getMsgText = () => (msgTextRef.current ? msgTextRef.current.value : msgText);
+  const getMsgText = () => { const refVal = msgTextRef.current ? msgTextRef.current.value : ""; return refVal || msgText; };
 
   const MessageComposeModal = () => {
     const generating = msgGenerating; const setGenerating = setMsgGenerating;
@@ -2833,9 +2864,10 @@ export default function TutorPulse() {
           <Input label="Parent Name" value={newStudentForm.parent} onChange={(v) => updateNewStudentForm("parent", v)} placeholder="Parent/Guardian name" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <PhoneInput label="Parent Phone" value={newStudentForm.parentPhone} onChange={(v) => updateNewStudentForm("parentPhone", v)} />
-            <Input label="Email" value={newStudentForm.parentEmail} onChange={(v) => updateNewStudentForm("parentEmail", v)} placeholder="email@example.com" />
           </div>
+          <Input label="Parent Email" value={newStudentForm.parentEmail} onChange={(v) => updateNewStudentForm("parentEmail", v)} placeholder="email@example.com" />
           <PhoneInput label="Student Phone (optional)" value={newStudentForm.studentPhone || ""} onChange={(v) => updateNewStudentForm("studentPhone", v)} />
+          <Input label="Student Email (optional)" value={newStudentForm.studentEmail || ""} onChange={(v) => updateNewStudentForm("studentEmail", v)} placeholder="student@example.com" />
           <Input label="Address" value={newStudentForm.address} onChange={(v) => updateNewStudentForm("address", v)} placeholder="Student's home address" />
           <Input label="Hourly Rate ($)" type="number" value={newStudentForm.hourlyRate} onChange={(v) => updateNewStudentForm("hourlyRate", v)} />
           <Input label="Notes" value={newStudentForm.notes} onChange={(v) => updateNewStudentForm("notes", v)} multiline placeholder="Any notes about the student..." />
@@ -2850,7 +2882,7 @@ export default function TutorPulse() {
               }));
               const firstGrade = subjects[0]?.grade || "";
               // For backward compat, also set subject/stream to first entry
-              addStudent({ name: newStudentForm.name, level: newStudentForm.level === "Other" ? (newStudentForm.levelOther || "Other") : newStudentForm.level, subjects: subjects, subject: subjects[0].subject, stream: subjects[0].stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, studentPhone: newStudentForm.studentPhone || "", hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, gradeCurrent: firstGrade, gradeStart: firstGrade, gradeHistory: [], status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
+              addStudent({ name: newStudentForm.name, level: newStudentForm.level === "Other" ? (newStudentForm.levelOther || "Other") : newStudentForm.level, subjects: subjects, subject: subjects[0].subject, stream: subjects[0].stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, studentPhone: newStudentForm.studentPhone || "", studentEmail: newStudentForm.studentEmail || "", hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, gradeCurrent: firstGrade, gradeStart: firstGrade, gradeHistory: [], status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
               setNewStudentForm({ name: "", level: "P5", levelOther: "", subjects: [{ subject: "Chinese", subjectOther: "", stream: "Standard", streamOther: "" }], parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", gradeCurrent: "", notes: "" });
               setShowNewStudent(false);
             }}>Add Student</Button>
@@ -2862,7 +2894,7 @@ export default function TutorPulse() {
       {selectedStudent && (() => {
         const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
         const startEdit = () => {
-          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, levelOther: selectedStudent.levelOther || "", subjects: selectedStudent.subjects || [{ subject: selectedStudent.subject || "Chinese", subjectOther: "", stream: selectedStudent.stream || "Standard", streamOther: "" }], subject: selectedStudent.subject, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, studentPhone: selectedStudent.studentPhone || "", hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status, paymentMode: selectedStudent.paymentMode || "monthly", gradeStart: selectedStudent.gradeStart || "", gradeCurrent: selectedStudent.gradeCurrent || "", gradeHistory: selectedStudent.gradeHistory || [] });
+          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, levelOther: selectedStudent.levelOther || "", subjects: selectedStudent.subjects || [{ subject: selectedStudent.subject || "Chinese", subjectOther: "", stream: selectedStudent.stream || "Standard", streamOther: "" }], subject: selectedStudent.subject, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, studentPhone: selectedStudent.studentPhone || "", studentEmail: selectedStudent.studentEmail || "", hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status, paymentMode: selectedStudent.paymentMode || "monthly", gradeStart: selectedStudent.gradeStart || "", gradeCurrent: selectedStudent.gradeCurrent || "", gradeHistory: selectedStudent.gradeHistory || [] });
           setEditingStudent(true);
         };
         const saveEdit = () => {
@@ -2874,7 +2906,7 @@ export default function TutorPulse() {
             gradeCurrent: e.gradeCurrent || e.grade || "",
             assessments: (e.assessments || []).filter(a => a.label || a.grade),
           }));
-          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, studentPhone: studentEditForm.studentPhone || "", hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeCurrent: resolvedSubs[0]?.gradeCurrent || "", gradeStart: resolvedSubs[0]?.gradeStart || "", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, studentPhone: studentEditForm.studentPhone || "", studentEmail: studentEditForm.studentEmail || "", hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeCurrent: resolvedSubs[0]?.gradeCurrent || "", gradeStart: resolvedSubs[0]?.gradeStart || "", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
           updateStudent(selectedStudent.id, u); setSelectedStudent({ ...selectedStudent, ...u }); setEditingStudent(false); addToast("Student updated");
         };
         const uf = (k, v) => setStudentEditForm((f) => ({ ...f, [k]: v }));
@@ -2967,8 +2999,10 @@ export default function TutorPulse() {
                 ))}
                 <button onClick={() => { const subs = [...(studentEditForm.subjects || [{ subject: "Chinese", subjectOther: "", stream: "Standard", streamOther: "" }]), { subject: "English", subjectOther: "", stream: "Standard", streamOther: "" }]; uf("subjects", subs); }} style={{ padding: "5px 10px", borderRadius: 6, border: "1px dashed " + theme.border, background: "transparent", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginBottom: 10, width: "100%" }}>+ Add Subject</button>
                 <Input label="Parent Name" value={studentEditForm.parent} onChange={(v) => uf("parent", v)} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><PhoneInput label="Parent Phone" value={studentEditForm.parentPhone} onChange={(v) => uf("parentPhone", v)} /><Input label="Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} /></div>
+                <PhoneInput label="Parent Phone" value={studentEditForm.parentPhone} onChange={(v) => uf("parentPhone", v)} />
+                <Input label="Parent Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} />
                 <PhoneInput label="Student Phone (optional)" value={studentEditForm.studentPhone || ""} onChange={(v) => uf("studentPhone", v)} />
+                <Input label="Student Email (optional)" value={studentEditForm.studentEmail || ""} onChange={(v) => uf("studentEmail", v)} />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }, { value: "graduated", label: "Graduated" }]} /></div>
                 <Select label="Payment Mode" value={studentEditForm.paymentMode || "monthly"} onChange={(v) => uf("paymentMode", v)} options={[{ value: "monthly", label: "Monthly" }, { value: "per_lesson", label: "Per Lesson" }]} />
                 <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
@@ -3035,7 +3069,7 @@ export default function TutorPulse() {
           </Modal>
         );
       })()}
-      {showMessageCompose && <MessageComposeModal />}
+      {showMessageCompose && <MessageComposeModal key="msg-compose" />}
       <AIAssistantModal />
       <NotificationsPanel />
     </div>
