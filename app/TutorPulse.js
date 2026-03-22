@@ -1714,6 +1714,7 @@ export default function TutorPulse() {
   // ── Lesson Detail (inline — not a sub-component, to prevent textarea remount) ──
   const lessonDetailStudent = selectedLesson ? getStudent(selectedLesson.studentId) : null;
   const [editingLesson, setEditingLesson] = useState(false);
+  const [cancellingLesson, setCancellingLesson] = useState(false);
   const [lessonEdit, setLessonEdit] = useState({});
   const [deletedLesson, setDeletedLesson] = useState(null);
   const [returnToStudentId, setReturnToStudentId] = useState(null);
@@ -2608,7 +2609,7 @@ export default function TutorPulse() {
       {selectedLesson && (
         <Modal open={!!selectedLesson} onClose={() => { 
           const returnTo = returnToStudentId;
-          setSelectedLesson(null); setEditingLesson(false);
+          setSelectedLesson(null); setEditingLesson(false); setCancellingLesson(false);
           if (returnTo) { const student = store.students.find(s => s.id === returnTo); if (student) setSelectedStudent(student); setReturnToStudentId(null); }
         }} title={editingLesson ? "Edit Lesson" : "Lesson Details"}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -2635,6 +2636,12 @@ export default function TutorPulse() {
                 <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>LOCATION</div><div style={{ fontSize: 14, fontWeight: 600 }}>{selectedLesson.location}</div></div>
               </div>
               <div style={{ padding: 12, background: theme.bgInput, borderRadius: 10, marginBottom: 16 }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 2 }}>SUBJECT</div><div style={{ fontSize: 14, fontWeight: 600 }}>{(selectedLesson.subject || "").split(" — ")[0]}</div>{(selectedLesson.subject || "").includes(" — ") && <><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginTop: 8, marginBottom: 2 }}>TOPIC / FOCUS</div><div style={{ fontSize: 14, fontWeight: 600 }}>{(selectedLesson.subject || "").split(" — ").slice(1).join(" — ")}</div></>}</div>
+              {selectedLesson.status === "cancelled" && selectedLesson.cancelReason && (
+                <div style={{ padding: 10, background: theme.dangerBg, borderRadius: 10, marginBottom: 16, border: "1px solid " + theme.danger + "22" }}>
+                  <div style={{ fontSize: 11, color: theme.danger, fontWeight: 600, marginBottom: 2 }}>CANCELLATION REASON</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{selectedLesson.cancelReason}{selectedLesson.cancelReason === "Other" && selectedLesson.cancelNote ? ": " + selectedLesson.cancelNote : ""}</div>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -2706,16 +2713,53 @@ export default function TutorPulse() {
             }} placeholder="Homework assigned (not shown in invoice)..." rows={2} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical" }} />
             <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>For your own records. Not included in AI-generated invoices.</div>
           </div>
-          {/* Exclude from billing toggle */}
-          <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
-            <button onClick={() => { const newVal = !selectedLesson.excludeFromBilling; updateLesson(selectedLesson.id, { excludeFromBilling: newVal }); setSelectedLesson({ ...selectedLesson, excludeFromBilling: newVal }); addToast(newVal ? "Excluded from billing" : "Included in billing"); }} style={{ width: 40, height: 22, borderRadius: 11, border: "none", background: selectedLesson.excludeFromBilling ? theme.danger : theme.borderLight, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
-              <div style={{ width: 18, height: 18, borderRadius: 9, background: "white", position: "absolute", top: 2, left: selectedLesson.excludeFromBilling ? 20 : 2, transition: "left 0.2s" }} />
-            </button>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: selectedLesson.excludeFromBilling ? theme.danger : theme.textSecondary }}>Exclude from billing</div>
-              <div style={{ fontSize: 11, color: theme.textMuted }}>Toggle on for agency intro lessons or waived sessions</div>
+          {/* Billing toggles */}
+          {selectedLesson.status === "cancelled" ? (
+            <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
+              <button onClick={() => { const newVal = !selectedLesson.collectedButCancelled; updateLesson(selectedLesson.id, { collectedButCancelled: newVal }); setSelectedLesson({ ...selectedLesson, collectedButCancelled: newVal }); addToast(newVal ? "Marked as collected" : "Unmarked"); }} style={{ width: 40, height: 22, borderRadius: 11, border: "none", background: selectedLesson.collectedButCancelled ? theme.warning : theme.borderLight, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                <div style={{ width: 18, height: 18, borderRadius: 9, background: "white", position: "absolute", top: 2, left: selectedLesson.collectedButCancelled ? 20 : 2, transition: "left 0.2s" }} />
+              </button>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: selectedLesson.collectedButCancelled ? theme.warning : theme.textSecondary }}>Collected but Cancelled</div>
+                <div style={{ fontSize: 11, color: theme.textMuted }}>Payment received but lesson didn't happen. Use "Waive Fee" on a future lesson to offset.</div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ marginBottom: 20, padding: "10px 14px", background: theme.bgInput, borderRadius: 10, border: "1px solid " + theme.border }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: selectedLesson.waiveFee ? 10 : 0 }}>
+                <button onClick={() => {
+                  const newVal = !selectedLesson.waiveFee;
+                  const updates = { waiveFee: newVal, excludeFromBilling: newVal };
+                  if (!newVal) { updates.waiveReason = ""; updates.waiveNote = ""; }
+                  else if (!selectedLesson.waiveReason) { updates.waiveReason = "Trial"; }
+                  updateLesson(selectedLesson.id, updates);
+                  setSelectedLesson({ ...selectedLesson, ...updates });
+                  addToast(newVal ? "Fee waived for this lesson" : "Fee reinstated");
+                }} style={{ width: 40, height: 22, borderRadius: 11, border: "none", background: selectedLesson.waiveFee ? theme.purple : theme.borderLight, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: 9, background: "white", position: "absolute", top: 2, left: selectedLesson.waiveFee ? 20 : 2, transition: "left 0.2s" }} />
+                </button>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: selectedLesson.waiveFee ? theme.purple : theme.textSecondary }}>Waive Fee</div>
+                  <div style={{ fontSize: 11, color: theme.textMuted }}>Lesson recorded but not charged</div>
+                </div>
+              </div>
+              {selectedLesson.waiveFee && (
+                <div style={{ paddingLeft: 50 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                    {["Trial", "Makeup", "Goodwill", "Offset", "Other"].map(r => (
+                      <button key={r} onClick={() => {
+                        updateLesson(selectedLesson.id, { waiveReason: r, waiveNote: r !== "Other" ? "" : (selectedLesson.waiveNote || "") });
+                        setSelectedLesson({ ...selectedLesson, waiveReason: r, waiveNote: r !== "Other" ? "" : (selectedLesson.waiveNote || "") });
+                      }} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + ((selectedLesson.waiveReason || "Trial") === r ? theme.purple : theme.border), background: (selectedLesson.waiveReason || "Trial") === r ? theme.purple + "22" : "transparent", color: (selectedLesson.waiveReason || "Trial") === r ? theme.purple : theme.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{r}</button>
+                    ))}
+                  </div>
+                  {(selectedLesson.waiveReason === "Other") && (
+                    <input defaultValue={selectedLesson.waiveNote || ""} onBlur={(e) => { updateLesson(selectedLesson.id, { waiveNote: e.target.value }); setSelectedLesson({ ...selectedLesson, waiveNote: e.target.value }); }} placeholder="Reason for waiver..." style={{ width: "100%", padding: "6px 10px", background: theme.bgElevated, border: "1px solid " + theme.border, borderRadius: 6, color: theme.text, outline: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif" }} />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {/* Actions — always show edit + delete, even for completed/cancelled */}
           {!editingLesson && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2725,8 +2769,34 @@ export default function TutorPulse() {
               {selectedLesson.status === "pending" && (
                 <Button size="sm" icon="check" onClick={() => { updateLesson(selectedLesson.id, { status: "confirmed" }); setSelectedLesson({ ...selectedLesson, status: "confirmed" }); addToast("Lesson confirmed"); }} style={{ background: theme.infoBg, color: theme.info, border: "none", borderRadius: 10, cursor: "pointer" }}>Confirm</Button>
               )}
-              {selectedLesson.status !== "cancelled" && selectedLesson.status !== "completed" && (
-                <Button size="sm" variant="danger" icon="x" onClick={() => { updateLesson(selectedLesson.id, { status: "cancelled" }); setSelectedLesson({ ...selectedLesson, status: "cancelled" }); addToast("Lesson cancelled"); }}>Cancel</Button>
+              {selectedLesson.status !== "cancelled" && selectedLesson.status !== "completed" && !cancellingLesson && (
+                <Button size="sm" variant="danger" icon="x" onClick={() => setCancellingLesson(true)}>Cancel</Button>
+              )}
+              {cancellingLesson && (
+                <div style={{ width: "100%", padding: 12, background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "33" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: theme.danger, marginBottom: 8 }}>Reason for cancellation:</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                    {["Student MC", "Student No-Show", "Tutor Unavailable", "Holiday", "Rescheduled", "Other"].map(r => (
+                      <button key={r} onClick={() => {
+                        if (r === "Other") {
+                          const reason = prompt("Cancellation reason:");
+                          if (reason !== null) {
+                            updateLesson(selectedLesson.id, { status: "cancelled", cancelReason: "Other", cancelNote: reason });
+                            setSelectedLesson({ ...selectedLesson, status: "cancelled", cancelReason: "Other", cancelNote: reason });
+                            setCancellingLesson(false);
+                            addToast("Lesson cancelled — " + reason);
+                          }
+                        } else {
+                          updateLesson(selectedLesson.id, { status: "cancelled", cancelReason: r, cancelNote: "" });
+                          setSelectedLesson({ ...selectedLesson, status: "cancelled", cancelReason: r, cancelNote: "" });
+                          setCancellingLesson(false);
+                          addToast("Lesson cancelled — " + r);
+                        }
+                      }} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid " + theme.danger + "44", background: "transparent", color: theme.text, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{r}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => setCancellingLesson(false)} style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>← Back</button>
+                </div>
               )}
               {(selectedLesson.status === "cancelled" || selectedLesson.status === "completed") && (
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => { updateLesson(selectedLesson.id, { status: "confirmed" }); setSelectedLesson({ ...selectedLesson, status: "confirmed" }); addToast("Lesson reverted to confirmed"); }}>Revert to Confirmed</Button>
@@ -3038,7 +3108,7 @@ export default function TutorPulse() {
                   {bulkDeleteMode && (<div data-cb="1" style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + theme.borderLight, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}></div>)}
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}{l.excludeFromBilling && <span style={{ fontSize: 10, color: theme.danger, marginLeft: 6 }}>EXCL</span>}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div></div>
+                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}{l.waiveFee && <span style={{ fontSize: 10, color: theme.purple, marginLeft: 6 }}>WAIVED{l.waiveReason ? " · " + l.waiveReason : ""}{l.waiveReason === "Other" && l.waiveNote ? ": " + l.waiveNote : ""}</span>}{l.collectedButCancelled && <span style={{ fontSize: 10, color: theme.warning, marginLeft: 6 }}>CBC</span>}{l.excludeFromBilling && !l.waiveFee && <span style={{ fontSize: 10, color: theme.danger, marginLeft: 6 }}>EXCL</span>}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div></div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}><Badge text={l.status} color={getStatusColor(l.status)} bg={getStatusBg(l.status)} />{!bulkDeleteMode && <Icon name="chevRight" size={14} color={theme.textMuted} />}</div>
                     </div>
                     {l.comment && (<div style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 8, borderLeft: "2px solid " + theme.borderLight }}>{l.comment}</div>)}
