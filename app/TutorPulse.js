@@ -10,6 +10,8 @@ import * as XLSX from "xlsx";
 
 // ── Data Store (in-memory with persistence) ─────────────────
 const STORAGE_KEY = "tutorpulse-data";
+const BACKUP_PREFIX = "tutorpulse-backup-";
+const MAX_BACKUPS = 7;
 
 const createStore = () => {
   return { students: [], lessons: [], payments: [], messages: [], notifications: [], revenueHistory: [], settings: { tutorName: "" } };
@@ -34,6 +36,53 @@ const saveStore = async (data) => {
   } catch (e) {
     console.error("Failed to save:", e);
   }
+};
+
+const autoBackup = (data) => {
+  try {
+    if (!window.localStorage) return;
+    const now = new Date();
+    // Only backup if past 2am
+    if (now.getHours() < 2) return;
+    const today = now.toISOString().split("T")[0];
+    const backupKey = BACKUP_PREFIX + today;
+    // Skip if today's backup already exists
+    if (window.localStorage.getItem(backupKey)) return;
+    window.localStorage.setItem(backupKey, JSON.stringify(data));
+    // Clean old backups beyond MAX_BACKUPS
+    const allKeys = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(BACKUP_PREFIX)) allKeys.push(key);
+    }
+    allKeys.sort().reverse();
+    allKeys.slice(MAX_BACKUPS).forEach(key => window.localStorage.removeItem(key));
+  } catch (e) { /* backup is best-effort */ }
+};
+
+const listBackups = () => {
+  const backups = [];
+  try {
+    if (!window.localStorage) return backups;
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(BACKUP_PREFIX)) {
+        const date = key.replace(BACKUP_PREFIX, "");
+        const raw = window.localStorage.getItem(key);
+        const size = raw ? Math.round(raw.length / 1024) : 0;
+        backups.push({ key, date, size });
+      }
+    }
+  } catch (e) {}
+  return backups.sort((a, b) => b.date.localeCompare(a.date));
+};
+
+const restoreBackup = (key) => {
+  try {
+    const raw = window.localStorage ? window.localStorage.getItem(key) : null;
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
 };
 
 // ── Icons (inline SVG components) ───────────────────────────
@@ -512,6 +561,15 @@ export default function TutorPulse() {
     const interval = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-backup: check on load + every 30 min (like WhatsApp 2am backup)
+  useEffect(() => {
+    if (loaded && store.students.length > 0) autoBackup(store);
+    const backupInterval = setInterval(() => {
+      if (store.students.length > 0) autoBackup(store);
+    }, 30 * 60 * 1000);
+    return () => clearInterval(backupInterval);
+  }, [loaded]);
 
   const todayLessons = useMemo(() => {
     return store.lessons.filter((l) => {
@@ -1650,6 +1708,36 @@ export default function TutorPulse() {
                   {"1. Download the template above (.xlsx)\n2. Open in Excel or Google Sheets\n3. Level, Subject, Stream and Status columns — see Valid Values tab\n4. For multiple subjects per student, add separate rows\n5. Delete the example row, fill in your students\n6. Save and tap \"Import Students\"\n7. Accepts both .xlsx and .csv files"}
                 </div>
               </div>
+            </Card>
+
+            {/* Auto-Backups */}
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 6, letterSpacing: 0.5 }}>AUTO-BACKUPS</div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Your data is automatically backed up daily at 2:00 AM. Last {MAX_BACKUPS} days are kept. We still recommend downloading a Full Backup periodically for safekeeping.</div>
+              {(() => {
+                const backups = listBackups();
+                return backups.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {backups.map(b => (
+                      <div key={b.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: theme.bgInput, borderRadius: 8, border: "1px solid " + theme.border }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: theme.text }}>{new Date(b.date + "T00:00:00").toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>
+                          <div style={{ fontSize: 10, color: theme.textMuted }}>{b.size} KB</div>
+                        </div>
+                        <button onClick={() => {
+                          if (window.confirm("Restore data from " + b.date + "? This will replace ALL current data.")) {
+                            const data = restoreBackup(b.key);
+                            if (data) { setStore(data); saveStore(data); addToast("Restored backup from " + b.date); }
+                            else { addToast("Failed to restore backup", "error"); }
+                          }
+                        }} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + theme.border, background: theme.bgElevated, color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Restore</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: theme.textMuted, padding: 8 }}>No auto-backups yet. Backups are created automatically when you use the app.</div>
+                );
+              })()}
             </Card>
 
             {/* Revenue History Editor */}
@@ -3158,3 +3246,4 @@ export default function TutorPulse() {
     </div>
   );
 }
+
