@@ -223,6 +223,8 @@ const LEVEL_OPTIONS = [
 const SUBJECT_OPTIONS = [
   { value: "English", label: "English" },
   { value: "Chinese", label: "Chinese" },
+  { value: "Science", label: "Science" },
+  { value: "Mathematics", label: "Mathematics" },
   { value: "E Math", label: "E Math" },
   { value: "A Math", label: "A Math" },
   { value: "Physics", label: "Physics" },
@@ -317,6 +319,7 @@ const PhoneInput = ({ label, value, onChange, style = {} }) => {
   // Parse existing value: "+65 91234567" or "6591234567" or "91234567"
   const parsePhone = (v) => {
     const raw = (v || "").replace(/[\s\-()]/g, "");
+    if (raw.includes("|")) { const [c, n] = raw.split("|"); return { code: c || "65", num: n || "" }; }
     if (raw.startsWith("+")) {
       // Try known country codes (longest first)
       const codes = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234","65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52","1"];
@@ -335,7 +338,7 @@ const PhoneInput = ({ label, value, onChange, style = {} }) => {
     return { code: "65", num: raw };
   };
   const { code, num } = parsePhone(value);
-  const update = (newCode, newNum) => onChange(newCode + newNum);
+const update = (newCode, newNum) => onChange(newCode + "|" + newNum);
   return (
     <div style={{ marginBottom: 16, ...style }}>
       {label && <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</label>}
@@ -1588,7 +1591,7 @@ export default function TutorPulse() {
                     ws["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 20 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 28 }, { wch: 12 }, { wch: 30 }];
                     // Reference data
                     const levels = ["P1","P2","P3","P4","P5","P6","Sec 1","Sec 2","Sec 3","Sec 4","Sec 5","JC 1","JC 2","Other"];
-                    const subjects = ["English","Chinese","E Math","A Math","Physics","Chemistry","Biology","Combined Science","Geography","History","Literature","Combined Humanities","Food and Nutrition","Design and Technology","Other"];
+                    const subjects = ["English","Chinese","Science","Mathematics","E Math","A Math","Physics","Chemistry","Biology","Combined Science","Geography","History","Literature","Combined Humanities","Food and Nutrition","Design and Technology","Other"];
                     const streams = ["Foundation","Standard","Higher","G1","G2","G3","H1","H2","H3","Other"];
                     const statuses = ["active","trial","paused","graduated"];
                     const payModes = ["monthly","per_lesson"];
