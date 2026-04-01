@@ -223,8 +223,8 @@ const LEVEL_OPTIONS = [
 const SUBJECT_OPTIONS = [
   { value: "English", label: "English" },
   { value: "Chinese", label: "Chinese" },
-  { value: "Science", label: "Science" },
   { value: "Mathematics", label: "Mathematics" },
+  { value: "Science", label: "Science" },
   { value: "E Math", label: "E Math" },
   { value: "A Math", label: "A Math" },
   { value: "Physics", label: "Physics" },
@@ -316,29 +316,35 @@ const Input = ({ label, value, onChange, type = "text", placeholder, style = {},
 );
 
 const PhoneInput = ({ label, value, onChange, style = {} }) => {
-  // Parse existing value: "+65 91234567" or "6591234567" or "91234567"
+  // Storage format: "65|91234567" (code|number) or legacy "6591234567" / "+65 91234567"
   const parsePhone = (v) => {
-    const raw = (v || "").replace(/[\s\-()]/g, "");
-    if (raw.includes("|")) { const [c, n] = raw.split("|"); return { code: c || "65", num: n || "" }; }
-    if (raw.startsWith("+")) {
-      // Try known country codes (longest first)
+    const raw = (v || "");
+    // New format with separator
+    if (raw.includes("|")) {
+      const [c, n] = raw.split("|");
+      return { code: c || "65", num: n || "" };
+    }
+    // Legacy: strip formatting
+    const clean = raw.replace(/[\s\-()]/g, "");
+    if (!clean) return { code: "65", num: "" };
+    if (clean.startsWith("+")) {
       const codes = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234","65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52","1"];
-      const digits = raw.substring(1);
-      for (const c of codes) { if (digits.startsWith(c)) return { code: c, num: digits.substring(c.length) }; }
+      const digits = clean.substring(1);
+      for (const c of codes) { if (digits.startsWith(c) && digits.length > c.length) return { code: c, num: digits.substring(c.length) }; }
       return { code: "65", num: digits };
     }
-    // Bare digits — assume SG if 8 digits starting with 6/8/9
-    if (raw.length === 8 && /^[689]/.test(raw)) return { code: "65", num: raw };
-    // Otherwise try to split: known codes
-    const codes3 = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234"];
-    const codes2 = ["65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52"];
-    for (const c of codes3) { if (raw.startsWith(c) && raw.length > c.length + 4) return { code: c, num: raw.substring(c.length) }; }
-    for (const c of codes2) { if (raw.startsWith(c) && raw.length > c.length + 4) return { code: c, num: raw.substring(c.length) }; }
-    if (raw.startsWith("1") && raw.length === 11) return { code: "1", num: raw.substring(1) };
-    return { code: "65", num: raw };
+    // Legacy bare digits — only split if long enough to have code + number
+    if (clean.length >= 10) {
+      const codes3 = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234"];
+      const codes2 = ["65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52"];
+      for (const c of codes3) { if (clean.startsWith(c)) return { code: c, num: clean.substring(c.length) }; }
+      for (const c of codes2) { if (clean.startsWith(c)) return { code: c, num: clean.substring(c.length) }; }
+    }
+    if (clean.length === 8 && /^[689]/.test(clean)) return { code: "65", num: clean };
+    return { code: "65", num: clean };
   };
   const { code, num } = parsePhone(value);
-const update = (newCode, newNum) => onChange(newCode + "|" + newNum);
+  const update = (newCode, newNum) => onChange(newCode + "|" + newNum);
   return (
     <div style={{ marginBottom: 16, ...style }}>
       {label && <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>{label}</label>}
@@ -473,6 +479,10 @@ export default function TutorPulse() {
   const [scheduleViewMode, setScheduleViewMode] = useState("today");
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [paymentFilter, setPaymentFilter] = useState("all");
+  const [monthView, setMonthView] = useState(() => {
+    const n = new Date();
+    return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0");
+  });
   const [onboarded, setOnboarded] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -987,12 +997,12 @@ export default function TutorPulse() {
                   <div style={{ display: "flex", gap: 3 }}>
                     {student.parentPhone && (
                       <button onClick={(e) => { e.stopPropagation(); setMessageTarget("parent"); setShowMessageCompose(student.id); }} style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 2 }}>
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>P
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>Parent
                       </button>
                     )}
                     {student.studentPhone && (
                       <button onClick={(e) => { e.stopPropagation(); setMessageTarget("student"); setShowMessageCompose(student.id); }} style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 2 }}>
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>S
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>Student
                       </button>
                     )}
                   </div>
@@ -1009,9 +1019,7 @@ export default function TutorPulse() {
   // PAGE: PAYMENTS / FEES
   // ═══════════════════════════════════════════════════════════
   const PaymentsPage = () => {
-    const [monthView, setMonthView] = useState(() => {
-      return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-    });
+    // monthView is at parent level to survive re-renders
     // Generate available months: current + any month that has lessons
     const availableMonths = useMemo(() => {
       const months = new Set();
@@ -1077,8 +1085,13 @@ export default function TutorPulse() {
           }
         }
       });
+      // Mark pending entries as overdue if month has passed
+      const currentMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      if (monthView < currentMonth) {
+        entries.forEach(e => { if (e.status === "pending") e.status = "overdue"; });
+      }
       return entries;
-    }, [store.students, store.lessons, store.payments, monthView, calcMonthlyFee, getStudent]);
+    }, [store.students, store.lessons, store.payments, monthView, calcMonthlyFee, getStudent, now]);
 
     const filtered = (paymentFilter === "all" ? monthPayments : monthPayments.filter(p => p.status === paymentFilter)).sort((a, b) => { const na = (getStudent(a.studentId) || {}).name || ""; const nb = (getStudent(b.studentId) || {}).name || ""; return na.localeCompare(nb); });
     const totalDue = monthPayments.reduce((s, p) => s + p.amount, 0);
@@ -1120,7 +1133,7 @@ export default function TutorPulse() {
         {/* Month Selector */}
         {(() => {
           const quickMonths = [];
-          for (let i = 0; i < 3; i++) {
+          for (let i = -1; i < 2; i++) {
             const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
             quickMonths.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
           }
@@ -1349,20 +1362,44 @@ export default function TutorPulse() {
       return Math.round(nonCancelled / monthLessons.length * 100);
     })();
     const lastMonthStr = now.getMonth() === 0 ? (now.getFullYear() - 1) + "-12" : now.getFullYear() + "-" + String(now.getMonth()).padStart(2, "0");
-    const collectionRate = store.payments.filter(p => p.month === lastMonthStr).length > 0 ? Math.round(store.payments.filter(p => p.month === lastMonthStr && p.status === "paid").length / store.payments.filter(p => p.month === lastMonthStr).length * 100) : 0;
+    const collectionRate = (() => {
+      const [ly, lm] = lastMonthStr.split("-").map(Number);
+      let totalDue = 0, totalPaid = 0;
+      store.students.filter(s => s.status === "active" || s.status === "trial").forEach(s => {
+        const calc = calcMonthlyFee(s.id, lastMonthStr);
+        if (calc.total > 0) {
+          totalDue += calc.total;
+          const paid = store.payments.filter(p => p.studentId === s.id && p.month === lastMonthStr && p.status === "paid");
+          if (paid.length > 0) totalPaid += paid.reduce((sum, p) => sum + (p.amount || 0), 0);
+        }
+      });
+      return totalDue > 0 ? Math.round(totalPaid / totalDue * 100) : 0;
+    })();
 
     const revenueData = (() => {
       const data = [];
       const now = new Date();
       const history = store.revenueHistory || [];
-      for (let i = 5; i >= 1; i--) {
+      for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
         const label = d.toLocaleDateString("en-SG", { month: "short" });
-        const entry = history.find(h => h.month === key);
-        data.push({ month: label, amount: entry ? entry.amount : 0 });
+        // Manual override takes priority, otherwise auto-calculate from lessons
+        const manualEntry = history.find(h => h.month === key);
+        if (manualEntry) {
+          data.push({ month: label, amount: manualEntry.amount });
+        } else if (i === 0) {
+          data.push({ month: label, amount: totalMonthly });
+        } else {
+          // Auto-calculate from actual lesson data
+          let monthTotal = 0;
+          store.students.forEach(s => {
+            const calc = calcMonthlyFee(s.id, key);
+            monthTotal += calc.total;
+          });
+          data.push({ month: label, amount: monthTotal });
+        }
       }
-      data.push({ month: now.toLocaleDateString("en-SG", { month: "short" }), amount: totalMonthly });
       return data;
     })();
     const maxRevenue = Math.max(...revenueData.map(d => d.amount), 1);
@@ -1575,6 +1612,59 @@ export default function TutorPulse() {
               <div style={{ fontSize: 11, color: theme.textMuted }}>Excel file has a summary tab + one tab per student with all their lessons and fees. Full Backup is for restoring data.</div>
             </Card>
 
+            {/* IRAS Annual Income Report */}
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 6, letterSpacing: 0.5 }}>ANNUAL INCOME REPORT</div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Generate a year-on-year income summary for IRAS tax filing.</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {[now.getFullYear(), now.getFullYear() - 1].map(year => (
+                  <Button key={year} size="sm" variant="secondary" icon="download" onClick={() => {
+                    try {
+                      const wb = XLSX.utils.book_new();
+                      const monthlyData = [];
+                      let yearTotal = 0;
+                      for (let m = 1; m <= 12; m++) {
+                        const key = year + "-" + String(m).padStart(2, "0");
+                        const monthLabel = new Date(year, m - 1, 1).toLocaleDateString("en-SG", { month: "long", year: "numeric" });
+                        let monthRevenue = 0;
+                        let lessonCount = 0;
+                        let totalHours = 0;
+                        store.students.forEach(s => {
+                          const calc = calcMonthlyFee(s.id, key);
+                          monthRevenue += calc.total;
+                          lessonCount += calc.sessions;
+                          totalHours += calc.totalHours;
+                        });
+                        const paid = store.payments.filter(p => p.month === key && p.status === "paid").reduce((sum, p) => sum + (p.amount || 0), 0);
+                        yearTotal += monthRevenue;
+                        monthlyData.push({ Month: monthLabel, Lessons: lessonCount, "Total Hours": Math.round(totalHours * 100) / 100, "Revenue (Billed)": Math.round(monthRevenue * 100) / 100, "Collected": Math.round(paid * 100) / 100, "Outstanding": Math.round((monthRevenue - paid) * 100) / 100 });
+                      }
+                      monthlyData.push({ Month: "TOTAL " + year, Lessons: monthlyData.reduce((s, r) => s + r.Lessons, 0), "Total Hours": Math.round(monthlyData.reduce((s, r) => s + r["Total Hours"], 0) * 100) / 100, "Revenue (Billed)": Math.round(yearTotal * 100) / 100, "Collected": Math.round(monthlyData.reduce((s, r) => s + r["Collected"], 0) * 100) / 100, "Outstanding": Math.round(monthlyData.reduce((s, r) => s + r["Outstanding"], 0) * 100) / 100 });
+                      // Student breakdown
+                      const studentData = [];
+                      store.students.forEach(s => {
+                        let sTotal = 0, sLessons = 0, sHours = 0;
+                        for (let m = 1; m <= 12; m++) {
+                          const calc = calcMonthlyFee(s.id, year + "-" + String(m).padStart(2, "0"));
+                          sTotal += calc.total; sLessons += calc.sessions; sHours += calc.totalHours;
+                        }
+                        if (sLessons > 0) studentData.push({ Student: s.name, Level: s.level, Subject: (s.subjects || []).map(e => e.subject).join(", ") || s.subject || "", Lessons: sLessons, "Total Hours": Math.round(sHours * 100) / 100, "Total Revenue": Math.round(sTotal * 100) / 100, "Rate/hr": s.hourlyRate });
+                      });
+                      studentData.sort((a, b) => b["Total Revenue"] - a["Total Revenue"]);
+                      const ws1 = XLSX.utils.json_to_sheet(monthlyData);
+                      ws1["!cols"] = [{ wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 14 }];
+                      const ws2 = XLSX.utils.json_to_sheet(studentData);
+                      ws2["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 10 }];
+                      XLSX.utils.book_append_sheet(wb, ws1, "Monthly Summary");
+                      XLSX.utils.book_append_sheet(wb, ws2, "By Student");
+                      XLSX.writeFile(wb, "TutorPulse-Income-" + year + ".xlsx");
+                      addToast("Income report for " + year + " downloaded");
+                    } catch (err) { addToast("Export failed: " + err.message, "error"); }
+                  }}>{year} Report</Button>
+                ))}
+              </div>
+            </Card>
+
             <Card style={{ padding: 14 }}>
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>IMPORT</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
@@ -1591,7 +1681,7 @@ export default function TutorPulse() {
                     ws["!cols"] = [{ wch: 20 }, { wch: 10 }, { wch: 20 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 28 }, { wch: 12 }, { wch: 30 }];
                     // Reference data
                     const levels = ["P1","P2","P3","P4","P5","P6","Sec 1","Sec 2","Sec 3","Sec 4","Sec 5","JC 1","JC 2","Other"];
-                    const subjects = ["English","Chinese","Science","Mathematics","E Math","A Math","Physics","Chemistry","Biology","Combined Science","Geography","History","Literature","Combined Humanities","Food and Nutrition","Design and Technology","Other"];
+                    const subjects = ["English","Chinese","Mathematics","Science","E Math","A Math","Physics","Chemistry","Biology","Combined Science","Geography","History","Literature","Combined Humanities","Food and Nutrition","Design and Technology","Other"];
                     const streams = ["Foundation","Standard","Higher","G1","G2","G3","H1","H2","H3","Other"];
                     const statuses = ["active","trial","paused","graduated"];
                     const payModes = ["monthly","per_lesson"];
@@ -1929,19 +2019,27 @@ export default function TutorPulse() {
 
   // ── WhatsApp Helpers ─────────────────────────────────────────
   const formatPhoneForWA = (phone) => {
-    // Strip all non-digits, ensure country code
+    // Handle new "65|91234567" format
+    if ((phone || "").includes("|")) {
+      const [c, n] = phone.split("|");
+      return (c || "") + (n || "").replace(/\D/g, "");
+    }
+    // Legacy: strip all non-digits, ensure country code
     let digits = (phone || "").replace(/[^0-9]/g, "");
-    // If starts with 9/8/6 and is 8 digits, prepend SG country code
     if (digits.length === 8 && /^[689]/.test(digits)) digits = "65" + digits;
-    // If starts with 0, replace with 65
     if (digits.startsWith("0")) digits = "65" + digits.substring(1);
     return digits;
   };
 
   const formatPhoneDisplay = (phone) => {
+    // Handle new "65|91234567" format
+    if ((phone || "").includes("|")) {
+      const [c, n] = phone.split("|");
+      if (!n) return "";
+      return "+" + (c || "65") + " " + n;
+    }
     const digits = formatPhoneForWA(phone);
     if (!digits || digits.length < 4) return phone || "";
-    // Find the country code by trying known codes
     const codes3 = ["856","855","673","852","853","886","971","966","974","968","973","965","254","234"];
     const codes2 = ["65","60","62","66","63","84","95","91","86","81","82","61","64","44","33","49","39","34","31","46","41","27","55","52"];
     for (const c of codes3) { if (digits.startsWith(c)) return "+" + c + " " + digits.substring(c.length); }
@@ -3249,4 +3347,3 @@ export default function TutorPulse() {
     </div>
   );
 }
-
