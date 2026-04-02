@@ -2373,7 +2373,7 @@ export default function TutorPulse() {
               const d = new Date(l.date);
               const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
               const timeStr = d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true });
-              msg += "\uD83D\uDCD6 " + dayStr + " at " + timeStr + "\n   " + l.subject + " (" + l.duration + " min, " + l.location + ")\n\n";
+              msg += "\uD83D\uDCD6 " + dayStr + " at " + timeStr + (allStudentIds.length > 1 ? " \u2014 " + (getStudent(l.studentId) || {}).name : "") + "\n   " + l.subject + " (" + l.duration + " min, " + l.location + ")\n\n";
             });
           } else {
             msg += "(No upcoming lessons scheduled yet)\n\n";
@@ -2386,17 +2386,21 @@ export default function TutorPulse() {
         id: "homework", label: "\uD83D\uDCDD Homework Summary", icon: "edit",
         desc: "Homework from selected month's lesson records",
         generate: (sid) => {
-          const s = getStudent(sid);
-          if (!s) return "";
+          const invoices = buildAllInvoices(sid);
+          if (invoices.length === 0) return "";
+          const first = invoices[0];
           const [iy, im] = invoiceMonth.split("-").map(Number);
           const mName = new Date(iy, im - 1, 1).toLocaleDateString("en-SG", { month: "long", year: "numeric" });
-          const lessons = store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === sid && d.getMonth() === im - 1 && d.getFullYear() === iy && l.homework; }).sort((a, b) => new Date(a.date) - new Date(b.date));
-          let msg = "Hi " + s.parent + ",\n\n";
-          msg += "Here is a summary of homework assigned to " + s.name + " for *" + mName + "*:\n\n";
-          if (lessons.length > 0) {
-            lessons.forEach(l => { const d = new Date(l.date); msg += "\uD83D\uDCCC " + d.toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + ": " + l.homework + "\n"; });
-          } else { msg += "(No homework recorded for " + mName + ")\n"; }
-          msg += "\nPlease ensure all homework is completed before the next session.\n\nThank you! \uD83D\uDE4F\n\u2014 " + tName;
+          let msg = "Hi " + first.student.parent + ",\n\n";
+          invoices.forEach(inv => {
+            if (invoices.length > 1) msg += "\u2014\u2014\u2014 " + inv.student.name + " \u2014\u2014\u2014\n";
+            msg += "Homework for " + inv.student.name + " \u2014 *" + mName + "*:\n\n";
+            const lessons = store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === inv.student.id && d.getMonth() === im - 1 && d.getFullYear() === iy && l.homework; }).sort((a, b) => new Date(a.date) - new Date(b.date));
+            if (lessons.length > 0) { lessons.forEach(l => { const d = new Date(l.date); msg += "\uD83D\uDCCC " + d.toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + ": " + l.homework + "\n"; }); }
+            else { msg += "(No homework recorded)\n"; }
+            msg += "\n";
+          });
+          msg += "Please ensure all homework is completed before the next session.\n\nThank you! \uD83D\uDE4F\n\u2014 " + tName;
           return msg;
         },
       },
@@ -2405,11 +2409,15 @@ export default function TutorPulse() {
         desc: "AI-generated progress summary from session feedback",
         async: true,
         generate: (sid) => {
-          const s = getStudent(sid);
-          if (!s) return "";
-          let msg = "Hi " + s.parent + ",\n\n";
-          msg += "Here is a progress update for " + s.name + ":\n\n";
-          msg += "[AI_PROGRESS_PLACEHOLDER]\n\n";
+          const invoices = buildAllInvoices(sid);
+          if (invoices.length === 0) return "";
+          const first = invoices[0];
+          let msg = "Hi " + first.student.parent + ",\n\n";
+          invoices.forEach(inv => {
+            if (invoices.length > 1) msg += "\u2014\u2014\u2014 " + inv.student.name + " \u2014\u2014\u2014\n";
+            msg += "Progress update for " + inv.student.name + ":\n\n";
+            msg += "[AI_PROGRESS_PLACEHOLDER]\n\n";
+          });
           msg += "Thank you for your continued support! \uD83D\uDE4F\n\u2014 " + tName;
           return msg;
         },
@@ -3212,14 +3220,18 @@ export default function TutorPulse() {
                 const fullSubject = lessonForm.topic ? subj + " — " + lessonForm.topic : subj;
                 // Clash detection helper
                 const checkClash = (dateISO, dur) => {
-                  const ls = new Date(dateISO).getTime(); const le = ls + dur * 60000;
+                  const newStart = new Date(dateISO).getTime(); const newEnd = newStart + dur * 60000;
+                  const newDateStr = new Date(dateISO).toISOString().split("T")[0];
                   const clashes = [];
                   store.lessons.filter(l => l.status !== "cancelled").forEach(l => {
-                    const s2 = new Date(l.date).getTime(); const e2 = s2 + l.duration * 60000;
-                    if (ls < e2 && le > s2) {
+                    const lDate = new Date(l.date);
+                    // Only check lessons on the same calendar day
+                    if (lDate.toISOString().split("T")[0] !== newDateStr) return;
+                    const lStart = lDate.getTime(); const lEnd = lStart + (parseInt(l.duration) || 60) * 60000;
+                    if (newStart < lEnd && newEnd > lStart) {
                       const n = getStudent(l.studentId);
                       const isSameStudent = l.studentId === sid;
-                      clashes.push((isSameStudent ? "⚠️ Same student: " : "🕐 Tutor busy: ") + (n ? n.name : "?") + " at " + new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }));
+                      clashes.push((isSameStudent ? "⚠️ Same student: " : "🕐 Tutor busy: ") + (n ? n.name : "?") + " at " + lDate.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }));
                     }
                   });
                   return clashes;
@@ -3631,7 +3643,7 @@ export default function TutorPulse() {
                     else { const start = new Date(classSchedDate + "T00:00:00"); const end = new Date(classSchedEndDate + "T00:00:00"); const d = new Date(start); while (d <= end) { if (classSchedType === "daily" || (classSchedType === "weekly" && cls.day !== undefined && d.getDay() === Number(cls.day))) dates.push(d.toISOString().split("T")[0]); d.setDate(d.getDate() + 1); } }
                     if (dates.length === 0) { addToast("No dates to schedule", "error"); return; }
                     const clashes = [];
-                    dates.forEach(dateStr => { const ls = new Date(dateStr + "T" + time + ":00").getTime(); const le = ls + dur * 60000; store.lessons.filter(l => l.status !== "cancelled").forEach(l => { const s2 = new Date(l.date).getTime(); const e2 = s2 + l.duration * 60000; if (ls < e2 && le > s2) { const n = getStudent(l.studentId); clashes.push(new Date(dateStr).toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " clashes with " + (n ? n.name : "?") + " at " + new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" })); } }); });
+                    dates.forEach(dateStr => { const ls = new Date(dateStr + "T" + time + ":00").getTime(); const le = ls + dur * 60000; store.lessons.filter(l => l.status !== "cancelled" && new Date(l.date).toISOString().split("T")[0] === dateStr).forEach(l => { const s2 = new Date(l.date).getTime(); const e2 = s2 + (parseInt(l.duration) || 60) * 60000; if (ls < e2 && le > s2) { const n = getStudent(l.studentId); clashes.push(new Date(dateStr).toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " clashes with " + (n ? n.name : "?") + " at " + new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" })); } }); });
                     const total = dates.length * members.length;
                     let msg = "Create " + total + " lessons (" + dates.length + " dates \u00D7 " + members.length + " students)?";
                     if (clashes.length > 0) msg = "\u26A0\uFE0F " + clashes.length + " time clash(es):\n" + clashes.slice(0, 5).join("\n") + (clashes.length > 5 ? "\n+" + (clashes.length - 5) + " more" : "") + "\n\nProceed anyway?";
