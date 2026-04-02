@@ -14,7 +14,7 @@ const BACKUP_PREFIX = "tutorpulse-backup-";
 const MAX_BACKUPS = 7;
 
 const createStore = () => {
-  return { students: [], lessons: [], payments: [], messages: [], notifications: [], revenueHistory: [], settings: { tutorName: "" } };
+  return { students: [], lessons: [], payments: [], messages: [], notifications: [], revenueHistory: [], classes: [], settings: { tutorName: "" } };
 };
 
 // ── Persistence helpers ─────────────────────────────────────
@@ -457,6 +457,16 @@ export default function TutorPulse() {
   const [showMessageCompose, setShowMessageCompose] = useState(null);
   const [messageTarget, setMessageTarget] = useState("parent"); // "parent" or "student"
   const [showAI, setShowAI] = useState(false);
+  // Class state
+  const [studentsTab, setStudentsTab] = useState("students"); // "students" or "classes"
+  const [selectedClass, setSelectedClass] = useState(null);
+  const [showNewClass, setShowNewClass] = useState(false);
+  const [editingClass, setEditingClass] = useState(false);
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [broadcastClassId, setBroadcastClassId] = useState(null);
+  const [broadcastMsg, setBroadcastMsg] = useState("");
+  const [broadcastRecipients, setBroadcastRecipients] = useState(new Set());
+  const [broadcastSentIdx, setBroadcastSentIdx] = useState(-1);
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiHistory, setAiHistory] = useState([]);
@@ -551,6 +561,13 @@ export default function TutorPulse() {
   }, []);
 
   const getStudent = useCallback((id) => store.students.find((s) => s.id === id), [store.students]);
+
+  // ── Class CRUD ──────────────────────────────────────────────
+  const addClass = useCallback((cls) => { setStore((s) => ({ ...s, classes: [...(s.classes || []), { id: "c" + genId(), ...cls }] })); }, []);
+  const updateClass = useCallback((id, updates) => { setStore((s) => ({ ...s, classes: (s.classes || []).map(c => c.id === id ? { ...c, ...updates } : c) })); }, []);
+  const deleteClass = useCallback((id) => { setStore((s) => ({ ...s, classes: (s.classes || []).filter(c => c.id !== id) })); }, []);
+  const getClass = useCallback((id) => (store.classes || []).find(c => c.id === id), [store.classes]);
+  const getStudentClasses = useCallback((studentId) => (store.classes || []).filter(c => (c.studentIds || []).includes(studentId)), [store.classes]);
 
   // ── Hourly rate → Monthly fee calculator ─────────────────────
   // Sums (hourlyRate × hours) for each non-cancelled lesson in the month
@@ -775,6 +792,10 @@ export default function TutorPulse() {
             <Icon name="send" size={24} color={theme.success} />
             <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Fee Reminder</div>
           </Card>
+          <Card hover onClick={() => { setBroadcastClassId(null); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); setBroadcastMsg(""); setShowBroadcast(true); }} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="message" size={24} color={theme.warning} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Broadcast</div>
+          </Card>
         </div>
       </div>
 
@@ -953,11 +974,7 @@ export default function TutorPulse() {
     const searched = (localSearch ? filtered.filter((s) => s.name.toLowerCase().includes(localSearch.toLowerCase()) || s.level.toLowerCase().includes(localSearch.toLowerCase())) : filtered).sort((a, b) => a.name.localeCompare(b.name));
 
     return (
-      <div className="fade-in">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Students</h1>
-          <Button size="sm" icon="plus" onClick={() => setShowNewStudent(true)}>Add Student</Button>
-        </div>
+      <div>
 
         {/* Search */}
         <div style={{ position: "relative", marginBottom: 16 }}>
@@ -1014,6 +1031,66 @@ export default function TutorPulse() {
       </div>
     );
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // CLASSES VIEW + STUDENTS PAGE WRAPPER
+  // ═══════════════════════════════════════════════════════════
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayNamesShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  const ClassesView = () => {
+    const classes = (store.classes || []).filter(c => c.status !== "archived");
+    return (
+      <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {classes.length === 0 ? (
+            <Card style={{ padding: 30, textAlign: "center" }}>
+              <Icon name="users" size={32} color={theme.textMuted} />
+              <div style={{ fontWeight: 600, color: theme.textSecondary, marginTop: 8 }}>No classes yet</div>
+              <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 4 }}>Create a class to group students and schedule lessons together</div>
+            </Card>
+          ) : classes.map(cls => {
+            const members = (cls.studentIds || []).map(id => getStudent(id)).filter(Boolean);
+            return (
+              <Card key={cls.id} hover onClick={() => setSelectedClass(cls)} style={{ padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: theme.accentBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Icon name="users" size={18} color={theme.accent} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{cls.name}</span>
+                      <Badge text={cls.status || "active"} color={getStatusColor(cls.status || "active")} bg={getStatusBg(cls.status || "active")} />
+                    </div>
+                    <div style={{ fontSize: 12, color: theme.textSecondary }}>
+                      {cls.day !== undefined && cls.day !== "" ? dayNamesShort[cls.day] + " " + (cls.time || "") : ""}{cls.subject ? ((cls.day !== undefined && cls.day !== "" ? " · " : "") + cls.subject + (cls.stream ? " (" + cls.stream + ")" : "")) : ""}
+                    </div>
+                    <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 2 }}>{members.length} student{members.length !== 1 ? "s" : ""}{cls.duration ? " · " + cls.duration + " min" : ""}{cls.location ? " · " + cls.location : ""}</div>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); setBroadcastClassId(cls.id); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); setBroadcastMsg(""); setShowBroadcast(true); }} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + theme.border, background: theme.bgElevated, color: theme.accent, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Broadcast</button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const StudentsPageWrapper = () => (
+    <div className="fade-in">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Students</h1>
+        {studentsTab === "students" ? (
+          <Button size="sm" icon="plus" onClick={() => setShowNewStudent(true)}>Add Student</Button>
+        ) : (
+          <Button size="sm" icon="plus" onClick={() => setShowNewClass(true)}>Add Class</Button>
+        )}
+      </div>
+      <TabBar tabs={[{ id: "students", label: "Students (" + store.students.length + ")" }, { id: "classes", label: "Classes (" + (store.classes || []).length + ")" }]} active={studentsTab} onChange={setStudentsTab} />
+      {studentsTab === "students" ? <StudentsPage /> : <ClassesView />}
+    </div>
+  );
 
   // ═══════════════════════════════════════════════════════════
   // PAGE: PAYMENTS / FEES
@@ -2731,7 +2808,7 @@ export default function TutorPulse() {
   // ═══════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════
-  const pages = { home: HomePage, schedule: SchedulePage, students: StudentsPage, payments: PaymentsPage, admin: AdminPage };
+  const pages = { home: HomePage, schedule: SchedulePage, students: StudentsPageWrapper, payments: PaymentsPage, admin: AdminPage };
   const PageComponent = pages[page];
 
   // Loading screen while persistence loads
@@ -3016,7 +3093,6 @@ export default function TutorPulse() {
       {/* New Lesson Modal — inline */}
       {showNewLesson && (() => {
         const sortedStudents = [...store.students].sort((a, b) => a.name.localeCompare(b.name));
-        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         const DURATION_OPTIONS = [{ value: "30", label: "30 min" }, { value: "45", label: "45 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }, { value: "other", label: "Other" }];
         const actualDuration = lessonForm.duration === "other" ? (parseInt(lessonForm.customDuration) || 60) : parseInt(lessonForm.duration);
         return (
@@ -3203,6 +3279,22 @@ export default function TutorPulse() {
                   {selectedStudent.address && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>{selectedStudent.address}</div>}
                 </Card>
                 {selectedStudent.notes && (<Card style={{ marginBottom: 12, padding: 14, borderLeft: "3px solid " + theme.accent }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>NOTES</div><div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.notes}</div></Card>)}
+                {/* Class membership */}
+                {(() => {
+                  const studentClasses = getStudentClasses(selectedStudent.id);
+                  return studentClasses.length > 0 && (
+                    <Card style={{ marginBottom: 12, padding: 14 }}>
+                      <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 6, letterSpacing: 0.5 }}>CLASSES</div>
+                      {studentClasses.map(c => (
+                        <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                          <Icon name="users" size={14} color={theme.accent} />
+                          <span style={{ fontSize: 13, color: theme.textSecondary }}>{c.name}</span>
+                          {c.day !== undefined && c.day !== "" && <span style={{ fontSize: 11, color: theme.textMuted }}>· {dayNamesShort[c.day]} {c.time}</span>}
+                        </div>
+                      ))}
+                    </Card>
+                  );
+                })()}
                 {/* Grade Tracking — per subject */}
                 <Card style={{ marginBottom: 12, padding: 14 }}>
                   <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5, marginBottom: 10 }}>GRADE TRACKING</div>
@@ -3342,6 +3434,229 @@ export default function TutorPulse() {
         );
       })()}
       {showMessageCompose && <MessageComposeModal key="msg-compose" />}
+      <AIAssistantModal />
+      <NotificationsPanel />
+
+      {/* ── Add/Edit Class Modal ──────────────────────────────── */}
+      {(showNewClass || editingClass) && (() => {
+        const isEdit = !!editingClass;
+        const initial = isEdit ? editingClass : { name: "", day: "", time: "15:00", duration: "90", location: "Home Studio", subject: "Chinese", stream: "Standard", studentIds: [], notes: "", status: "active" };
+        const [classForm, setClassForm] = useState(initial);
+        const uc = (k, v) => setClassForm(f => ({ ...f, [k]: v }));
+        const sortedStudents = [...store.students].filter(s => s.status === "active" || s.status === "trial").sort((a, b) => a.name.localeCompare(b.name));
+        const toggleStudent = (sid) => {
+          const ids = [...(classForm.studentIds || [])];
+          const idx = ids.indexOf(sid);
+          if (idx >= 0) ids.splice(idx, 1); else ids.push(sid);
+          uc("studentIds", ids);
+        };
+        return (
+          <Modal open={true} onClose={() => { setShowNewClass(false); setEditingClass(false); }} title={isEdit ? "Edit Class" : "Add New Class"} width={540}>
+            <Input label="Class Name" value={classForm.name} onChange={(v) => uc("name", v)} placeholder="e.g. Sec 3 Chinese Mon 3pm" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Select label="Day" value={classForm.day} onChange={(v) => uc("day", v)} options={[{ value: "", label: "— No fixed day —" }, ...dayNames.map((d, i) => ({ value: String(i), label: d }))]} />
+              <Input label="Time" type="time" value={classForm.time} onChange={(v) => uc("time", v)} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Select label="Duration" value={classForm.duration} onChange={(v) => uc("duration", v)} options={[{ value: "30", label: "30 min" }, { value: "45", label: "45 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }]} />
+              <Select label="Location" value={classForm.location} onChange={(v) => uc("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Select label="Subject" value={classForm.subject} onChange={(v) => uc("subject", v)} options={SUBJECT_OPTIONS} />
+              <Select label="Stream" value={classForm.stream} onChange={(v) => uc("stream", v)} options={STREAM_OPTIONS} />
+            </div>
+            {isEdit && <Select label="Status" value={classForm.status} onChange={(v) => uc("status", v)} options={[{ value: "active", label: "Active" }, { value: "paused", label: "Paused" }]} />}
+            <Input label="Notes" value={classForm.notes || ""} onChange={(v) => uc("notes", v)} multiline placeholder="Any notes about this class..." />
+            <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>STUDENTS ({(classForm.studentIds || []).length})</div>
+            <div style={{ maxHeight: 180, overflow: "auto", marginBottom: 16, border: "1px solid " + theme.border, borderRadius: 10, padding: 4 }}>
+              {sortedStudents.map(s => (
+                <div key={s.id} onClick={() => toggleStudent(s.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, cursor: "pointer", background: (classForm.studentIds || []).includes(s.id) ? theme.accentBg : "transparent" }}>
+                  <input type="checkbox" checked={(classForm.studentIds || []).includes(s.id)} readOnly style={{ accentColor: theme.accent, cursor: "pointer" }} />
+                  <Avatar initials={s.avatar} size={24} color={theme.accent} />
+                  <div style={{ flex: 1, fontSize: 13 }}>{s.name}</div>
+                  <div style={{ fontSize: 11, color: theme.textMuted }}>{s.level}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Button onClick={() => {
+                if (!classForm.name) { addToast("Please enter a class name", "error"); return; }
+                const data = { ...classForm, day: classForm.day !== "" ? Number(classForm.day) : undefined, duration: parseInt(classForm.duration) || 90 };
+                if (isEdit) { updateClass(editingClass.id, data); setSelectedClass({ ...editingClass, ...data }); addToast("Class updated"); }
+                else { addClass(data); addToast("Class created"); }
+                setShowNewClass(false); setEditingClass(false);
+              }}>{isEdit ? "Save Changes" : "Create Class"}</Button>
+              <Button variant="secondary" onClick={() => { setShowNewClass(false); setEditingClass(false); }}>Cancel</Button>
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {/* ── Class Detail Modal ────────────────────────────────── */}
+      {selectedClass && (() => {
+        const cls = getClass(selectedClass.id) || selectedClass;
+        const members = (cls.studentIds || []).map(id => getStudent(id)).filter(Boolean);
+        const [scheduleMode, setScheduleMode] = useState(false);
+        const [schedDate, setSchedDate] = useState(new Date().toISOString().split("T")[0]);
+        const [schedEndDate, setSchedEndDate] = useState("");
+        const [schedRecurring, setSchedRecurring] = useState(false);
+        return (
+          <Modal open={true} onClose={() => { setSelectedClass(null); }} title={cls.name} width={540}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              <Badge text={cls.status || "active"} color={getStatusColor(cls.status || "active")} bg={getStatusBg(cls.status || "active")} />
+              {cls.day !== undefined && cls.day !== "" && <span style={{ fontSize: 12, color: theme.textSecondary }}>{dayNames[cls.day]} {cls.time}</span>}
+              {cls.duration && <span style={{ fontSize: 12, color: theme.textMuted }}>· {cls.duration} min</span>}
+              {cls.location && <span style={{ fontSize: 12, color: theme.textMuted }}>· {cls.location}</span>}
+            </div>
+            {cls.subject && <div style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 12 }}>{cls.subject}{cls.stream ? " (" + cls.stream + ")" : ""}</div>}
+            {cls.notes && <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12, padding: 10, background: theme.bgInput, borderRadius: 8 }}>{cls.notes}</div>}
+            <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>MEMBERS ({members.length})</div>
+            <div style={{ marginBottom: 16 }}>
+              {members.map(s => (
+                <div key={s.id} onClick={() => { setSelectedClass(null); setSelectedStudent(s); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", cursor: "pointer", borderTop: "1px solid " + theme.border }}>
+                  <Avatar initials={s.avatar} size={28} color={getStatusColor(s.status)} />
+                  <div style={{ flex: 1 }}><span style={{ fontSize: 13, fontWeight: 500 }}>{s.name}</span></div>
+                  <span style={{ fontSize: 11, color: theme.textMuted }}>{s.level}</span>
+                </div>
+              ))}
+              {members.length === 0 && <div style={{ fontSize: 12, color: theme.textMuted, padding: 8 }}>No students in this class</div>}
+            </div>
+
+            {/* Schedule for class */}
+            {!scheduleMode ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button size="sm" icon="calendar" onClick={() => setScheduleMode(true)}>Schedule Class</Button>
+                <Button size="sm" variant="ghost" icon="message" onClick={() => { setBroadcastClassId(cls.id); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); setBroadcastMsg(""); setShowBroadcast(true); setSelectedClass(null); }}>Broadcast</Button>
+                <Button size="sm" variant="secondary" icon="edit" onClick={() => { setEditingClass(cls); setSelectedClass(null); }}>Edit</Button>
+                <Button size="sm" variant="ghost" icon="trash" onClick={() => { if (window.confirm("Delete class \"" + cls.name + "\"? Students won't be deleted.")) { deleteClass(cls.id); setSelectedClass(null); addToast("Class deleted"); } }} style={{ color: theme.danger }}>Delete</Button>
+              </div>
+            ) : (
+              <Card style={{ padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: theme.accent, marginBottom: 10 }}>Schedule lessons for {members.length} students</div>
+                <div style={{ display: "flex", gap: 2, background: theme.bgInput, borderRadius: 10, padding: 3, marginBottom: 12 }}>
+                  <button onClick={() => setSchedRecurring(false)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: !schedRecurring ? theme.bgElevated : "transparent", color: !schedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Single Date</button>
+                  <button onClick={() => setSchedRecurring(true)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: schedRecurring ? theme.bgElevated : "transparent", color: schedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Recurring</button>
+                </div>
+                {!schedRecurring ? (
+                  <Input label="Date" type="date" value={schedDate} onChange={setSchedDate} />
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <Input label="From" type="date" value={schedDate} onChange={setSchedDate} />
+                    <Input label="To" type="date" value={schedEndDate} onChange={setSchedEndDate} />
+                  </div>
+                )}
+                {schedRecurring && cls.day !== undefined && cls.day !== "" && (() => {
+                  const dates = [];
+                  const start = new Date(schedDate + "T00:00:00");
+                  const end = schedEndDate ? new Date(schedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+                  const d = new Date(start);
+                  while (d <= end) { if (d.getDay() === Number(cls.day)) dates.push(new Date(d)); d.setDate(d.getDate() + 1); }
+                  return dates.length > 0 && (
+                    <div style={{ marginBottom: 12, padding: 10, background: theme.bgInput, borderRadius: 8 }}>
+                      <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4 }}>PREVIEW — {dates.length} sessions × {members.length} students = {dates.length * members.length} lessons</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{dates.slice(0, 12).map((dt, i) => (<span key={i} style={{ padding: "2px 8px", borderRadius: 6, background: theme.bgElevated, fontSize: 11, color: theme.textSecondary }}>{dt.toLocaleDateString("en-SG", { day: "numeric", month: "short" })}</span>))}{dates.length > 12 && <span style={{ fontSize: 11, color: theme.textMuted }}>+{dates.length - 12} more</span>}</div>
+                    </div>
+                  );
+                })()}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button size="sm" onClick={() => {
+                    if (members.length === 0) { addToast("No students in class", "error"); return; }
+                    const time = cls.time || "15:00";
+                    const dur = cls.duration || 90;
+                    const subj = (cls.subject || "Lesson") + (cls.stream ? " (" + cls.stream + ")" : "");
+                    let dates = [];
+                    if (schedRecurring && cls.day !== undefined && cls.day !== "") {
+                      const start = new Date(schedDate + "T00:00:00");
+                      const end = schedEndDate ? new Date(schedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+                      const d = new Date(start);
+                      while (d <= end) { if (d.getDay() === Number(cls.day)) dates.push(d.toISOString().split("T")[0]); d.setDate(d.getDate() + 1); }
+                    } else {
+                      dates = [schedDate];
+                    }
+                    if (dates.length === 0) { addToast("No dates to schedule", "error"); return; }
+                    const total = dates.length * members.length;
+                    if (!window.confirm("Create " + total + " lessons (" + dates.length + " dates × " + members.length + " students)?")) return;
+                    const newLessons = [];
+                    dates.forEach(dateStr => {
+                      members.forEach(s => {
+                        const dt = new Date(dateStr + "T" + time + ":00");
+                        newLessons.push({ id: "l" + genId(), studentId: s.id, date: dt.toISOString(), duration: dur, subject: subj, location: cls.location || "Home Studio", status: "confirmed", classId: cls.id });
+                      });
+                    });
+                    setStore(prev => ({ ...prev, lessons: [...prev.lessons, ...newLessons] }));
+                    addToast(total + " lessons created");
+                    setScheduleMode(false);
+                  }}>Create {schedRecurring ? "Recurring" : ""} Lessons</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setScheduleMode(false)}>Cancel</Button>
+                </div>
+              </Card>
+            )}
+          </Modal>
+        );
+      })()}
+
+      {/* ── Broadcast Modal ───────────────────────────────────── */}
+      {showBroadcast && (() => {
+        const allClasses = (store.classes || []).filter(c => c.status !== "archived");
+        const cls = broadcastClassId ? (allClasses.find(c => c.id === broadcastClassId) || null) : null;
+        const recipients = cls ? (cls.studentIds || []).map(sid => { const s = getStudent(sid); return s ? { studentId: sid, name: s.name, parent: s.parent || "", phone: s.parentPhone || "" } : null; }).filter(Boolean) : [];
+        const selectedList = recipients.filter((_, i) => broadcastRecipients.has(i));
+        const broadcastRef = useRef(null);
+        const getBroadcastText = () => (broadcastRef.current ? broadcastRef.current.value : broadcastMsg);
+        return (
+          <Modal open={true} onClose={() => { setShowBroadcast(false); setBroadcastClassId(null); setBroadcastMsg(""); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); }} title="Broadcast Message" width={540}>
+            <Select label="Class" value={broadcastClassId || ""} onChange={(v) => { setBroadcastClassId(v || null); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); }} options={[{ value: "", label: "— Select a class —" }, ...allClasses.map(c => ({ value: c.id, label: c.name + " (" + (c.studentIds || []).length + " students)" }))]} />
+            {cls && recipients.length > 0 && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>RECIPIENTS ({broadcastRecipients.size}/{recipients.length})</div>
+                  <button onClick={() => { broadcastRecipients.size === recipients.length ? setBroadcastRecipients(new Set()) : setBroadcastRecipients(new Set(recipients.map((_, i) => i))); }} style={{ background: "none", border: "none", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{broadcastRecipients.size === recipients.length ? "Deselect All" : "Select All"}</button>
+                </div>
+                <div style={{ maxHeight: 120, overflow: "auto", marginBottom: 12, display: "flex", flexDirection: "column", gap: 3 }}>
+                  {recipients.map((r, idx) => (
+                    <div key={r.studentId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", borderRadius: 8, background: idx <= broadcastSentIdx ? theme.successBg : theme.bgElevated, border: "1px solid " + (idx <= broadcastSentIdx ? theme.success + "44" : theme.border), cursor: "pointer" }} onClick={() => { const s = new Set(broadcastRecipients); s.has(idx) ? s.delete(idx) : s.add(idx); setBroadcastRecipients(s); }}>
+                      <input type="checkbox" checked={broadcastRecipients.has(idx)} readOnly style={{ accentColor: theme.accent, cursor: "pointer" }} />
+                      <span style={{ fontSize: 12, fontWeight: 500, flex: 1 }}>{r.parent || r.name}</span>
+                      <span style={{ fontSize: 10, color: theme.textMuted }}>{r.name}</span>
+                      {idx <= broadcastSentIdx && <Icon name="check" size={12} color={theme.success} />}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase" }}>Message</label>
+                  <textarea ref={broadcastRef} defaultValue={broadcastMsg} onBlur={(e) => setBroadcastMsg(e.target.value)} placeholder="Type your broadcast message..." rows={4} style={{ width: "100%", padding: "10px 14px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {selectedList.length === 0 ? (
+                    <div style={{ fontSize: 13, color: theme.textMuted }}>Select recipients above</div>
+                  ) : broadcastSentIdx < selectedList.length - 1 ? (
+                    <button onClick={() => {
+                      const txt = getBroadcastText();
+                      if (!txt.trim()) { addToast("Please type a message", "error"); return; }
+                      const nextIdx = broadcastSentIdx + 1;
+                      const r = selectedList[nextIdx];
+                      openWhatsApp(r.phone, txt);
+                      setBroadcastSentIdx(nextIdx);
+                      if (nextIdx === selectedList.length - 1) addToast("All " + selectedList.length + " messages sent!");
+                    }} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 20px", borderRadius: 12, border: "none", background: "#25D366", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(37, 211, 102, 0.3)" }}>
+                      <WAIcon />
+                      {broadcastSentIdx === -1 ? "Send to " + (selectedList[0]?.parent || selectedList[0]?.name) + " (1/" + selectedList.length + ")" : "Next: " + (selectedList[broadcastSentIdx + 1]?.parent || selectedList[broadcastSentIdx + 1]?.name) + " (" + (broadcastSentIdx + 2) + "/" + selectedList.length + ")"}
+                    </button>
+                  ) : (
+                    <Button variant="success" icon="check" onClick={() => { setShowBroadcast(false); setBroadcastClassId(null); setBroadcastMsg(""); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); }}>All Done!</Button>
+                  )}
+                  {broadcastSentIdx > -1 && broadcastSentIdx < selectedList.length - 1 && (
+                    <div style={{ fontSize: 12, color: theme.success, display: "flex", alignItems: "center", gap: 4 }}>
+                      <Icon name="check" size={14} color={theme.success} /> {broadcastSentIdx + 1}/{selectedList.length}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </Modal>
+        );
+      })()}
+
       <AIAssistantModal />
       <NotificationsPanel />
     </div>
