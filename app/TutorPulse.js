@@ -2262,28 +2262,23 @@ export default function TutorPulse() {
         desc: "AI progress summary + lesson dates + fee breakdown",
         async: true,
         generate: (sid) => {
-          // Returns the static parts; AI summary is injected by applyTemplate
-          const inv = buildStudentInvoice(sid);
-          if (!inv) return "";
-          let msg = "Hi " + inv.student.parent + ",\n\n";
-          msg += "Here is " + inv.student.name + "'s tuition summary for *" + inv.monthName + "*:\n\n";
-          // AI progress summary placeholder
-          msg += "[AI_SUMMARY_PLACEHOLDER]\n\n";
-          msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalHours + "h):*\n";
-          inv.monthLessons.forEach((l) => {
-            const d = new Date(l.date);
-            const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
-            const timeStr = d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true });
-            msg += "  \u2022 " + dayStr + ", " + timeStr + " \u2014 " + l.subject + " (" + l.duration + " min)\n";
+          const invoices = buildAllInvoices(sid);
+          if (invoices.length === 0) return "";
+          const first = invoices[0];
+          let msg = "Hi " + first.student.parent + ",\n\n";
+          let grandTotal = 0;
+          invoices.forEach((inv) => {
+            if (invoices.length > 1) msg += "\u2014\u2014\u2014 " + inv.student.name + " \u2014\u2014\u2014\n\n";
+            msg += "Here is " + inv.student.name + "'s tuition summary for *" + inv.monthName + "*:\n\n";
+            msg += "[AI_SUMMARY_PLACEHOLDER]\n\n";
+            msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalHours + "h):*\n";
+            inv.monthLessons.forEach((l) => { const d = new Date(l.date); msg += "  \u2022 " + d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }) + " \u2014 " + l.subject + " (" + l.duration + " min)\n"; });
+            msg += "\n";
+            if (inv.cancelledLessons.length > 0) msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) excluded\n\n";
+            msg += "\uD83D\uDCB0 *Fee:* " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr = *$" + inv.finalAmount.toFixed(2) + "*\n\n";
+            grandTotal += inv.finalAmount;
           });
-          msg += "\n";
-          if (inv.cancelledLessons.length > 0) {
-            msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) excluded\n\n";
-          }
-          msg += "\uD83D\uDCB0 *Fee Breakdown:*\n";
-          msg += "  " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr\n";
-          msg += "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
-          msg += "  *Total Due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
+          if (invoices.length > 1) msg += "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\uD83D\uDCB0 *Combined Total: $" + grandTotal.toFixed(2) + "*\n\n";
           msg += "\uD83D\uDCB3 *Payment:* " + payInfo + "\nPlease pay by the 10th. Thank you! \uD83D\uDE4F\n\n\u2014 " + tName;
           return msg;
         },
@@ -2333,14 +2328,18 @@ export default function TutorPulse() {
         id: "reminder", label: "\uD83D\uDD14 Payment Reminder", icon: "bell",
         desc: "Quick reminder with sessions count and amount",
         generate: (sid) => {
-          const inv = buildStudentInvoice(sid);
-          if (!inv) return "";
-          let msg = "Hi " + inv.student.parent + ",\n\n";
-          msg += "Friendly reminder that " + inv.student.name + "'s *" + inv.monthName + "* tuition fee is due:\n\n";
-          msg += "\uD83D\uDCDA " + inv.totalSessions + " lessons (" + inv.totalHours + "h total)\n";
-          msg += "\uD83D\uDCB0 *Amount: $" + inv.finalAmount.toFixed(2) + "*\n";
-          msg += "\uD83D\uDCB3 " + payInfo + "\n\n";
-          msg += "Ignore this if already paid! Thank you \uD83D\uDE4F\n\u2014 " + tName;
+          const invoices = buildAllInvoices(sid);
+          if (invoices.length === 0) return "";
+          const first = invoices[0];
+          let msg = "Hi " + first.student.parent + ",\n\n";
+          let grandTotal = 0;
+          invoices.forEach(inv => {
+            msg += "Friendly reminder that " + inv.student.name + "'s *" + inv.monthName + "* tuition fee is due:\n";
+            msg += "\uD83D\uDCDA " + inv.totalSessions + " lessons (" + inv.totalHours + "h) = *$" + inv.finalAmount.toFixed(2) + "*\n\n";
+            grandTotal += inv.finalAmount;
+          });
+          if (invoices.length > 1) msg += "\uD83D\uDCB0 *Combined Total: $" + grandTotal.toFixed(2) + "*\n\n";
+          msg += "\uD83D\uDCB3 " + payInfo + "\n\nIgnore this if already paid! Thank you \uD83D\uDE4F\n\u2014 " + tName;
           return msg;
         },
       },
@@ -2348,13 +2347,18 @@ export default function TutorPulse() {
         id: "overdue", label: "\u26A0\uFE0F Overdue Notice", icon: "clock",
         desc: "Polite follow-up for overdue payments",
         generate: (sid) => {
-          const inv = buildStudentInvoice(sid);
-          if (!inv) return "";
-          let msg = "Hi " + inv.student.parent + ",\n\n";
-          msg += "I hope all is well! I noticed " + inv.student.name + "'s *" + inv.monthName + "* tuition fee is still outstanding.\n\n";
-          msg += "*Details:*\n";
-          msg += "  " + inv.totalSessions + " sessions (" + inv.totalHours + "h) \u2014 " + inv.student.level + " " + inv.student.stream + "\n";
-          msg += "  *Amount due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
+          const invoices = buildAllInvoices(sid);
+          if (invoices.length === 0) return "";
+          const first = invoices[0];
+          let msg = "Hi " + first.student.parent + ",\n\n";
+          msg += "I hope all is well! I noticed the following tuition fee(s) are still outstanding:\n\n";
+          let grandTotal = 0;
+          invoices.forEach(inv => {
+            msg += "*" + inv.student.name + "* \u2014 " + inv.monthName + "\n";
+            msg += "  " + inv.totalSessions + " sessions (" + inv.totalHours + "h) = *$" + inv.finalAmount.toFixed(2) + "*\n\n";
+            grandTotal += inv.finalAmount;
+          });
+          if (invoices.length > 1) msg += "\uD83D\uDCB0 *Combined Total: $" + grandTotal.toFixed(2) + "*\n\n";
           msg += "Kindly arrange payment via " + payInfo + " at your earliest convenience.\n\nThank you for your understanding \uD83D\uDE4F\n\u2014 " + tName;
           return msg;
         },
@@ -2363,17 +2367,19 @@ export default function TutorPulse() {
         id: "schedule", label: "\uD83D\uDCC5 Upcoming Schedule", icon: "calendar",
         desc: "Share upcoming lesson dates and topics",
         generate: (sid) => {
-          const inv = buildStudentInvoice(sid);
-          if (!inv) return "";
-          const upcoming = store.lessons.filter((l) => l.studentId === sid && new Date(l.date) >= new Date() && l.status !== "cancelled").sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 6);
-          let msg = "Hi " + inv.student.parent + ",\n\n";
-          msg += "Here is " + inv.student.name + "'s upcoming schedule:\n\n";
+          const invoices = buildAllInvoices(sid);
+          if (invoices.length === 0) return "";
+          const first = invoices[0];
+          const allSids = invoices.map(inv => inv.student.id);
+          const upcoming = store.lessons.filter((l) => allSids.includes(l.studentId) && new Date(l.date) >= new Date() && l.status !== "cancelled").sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 8);
+          let msg = "Hi " + first.student.parent + ",\n\n";
+          msg += invoices.length > 1 ? "Here is the upcoming schedule:\n\n" : "Here is " + first.student.name + "'s upcoming schedule:\n\n";
           if (upcoming.length > 0) {
             upcoming.forEach((l) => {
               const d = new Date(l.date);
               const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
               const timeStr = d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true });
-              msg += "\uD83D\uDCD6 " + dayStr + " at " + timeStr + (allStudentIds.length > 1 ? " \u2014 " + (getStudent(l.studentId) || {}).name : "") + "\n   " + l.subject + " (" + l.duration + " min, " + l.location + ")\n\n";
+              msg += "\uD83D\uDCD6 " + dayStr + " at " + timeStr + (allSids.length > 1 ? " \u2014 " + ((getStudent(l.studentId) || {}).name || "") : "") + "\n   " + l.subject + " (" + l.duration + " min, " + l.location + ")\n\n";
             });
           } else {
             msg += "(No upcoming lessons scheduled yet)\n\n";
@@ -3221,12 +3227,13 @@ export default function TutorPulse() {
                 // Clash detection helper
                 const checkClash = (dateISO, dur) => {
                   const newStart = new Date(dateISO).getTime(); const newEnd = newStart + dur * 60000;
-                  const newDateStr = new Date(dateISO).toISOString().split("T")[0];
+                  const nd = new Date(dateISO);
+                  const newDateStr = nd.getFullYear() + "-" + String(nd.getMonth() + 1).padStart(2, "0") + "-" + String(nd.getDate()).padStart(2, "0");
                   const clashes = [];
                   store.lessons.filter(l => l.status !== "cancelled").forEach(l => {
                     const lDate = new Date(l.date);
-                    // Only check lessons on the same calendar day
-                    if (lDate.toISOString().split("T")[0] !== newDateStr) return;
+                    const lDateStr = lDate.getFullYear() + "-" + String(lDate.getMonth() + 1).padStart(2, "0") + "-" + String(lDate.getDate()).padStart(2, "0");
+                    if (lDateStr !== newDateStr) return;
                     const lStart = lDate.getTime(); const lEnd = lStart + (parseInt(l.duration) || 60) * 60000;
                     if (newStart < lEnd && newEnd > lStart) {
                       const n = getStudent(l.studentId);
@@ -3643,7 +3650,7 @@ export default function TutorPulse() {
                     else { const start = new Date(classSchedDate + "T00:00:00"); const end = new Date(classSchedEndDate + "T00:00:00"); const d = new Date(start); while (d <= end) { if (classSchedType === "daily" || (classSchedType === "weekly" && cls.day !== undefined && d.getDay() === Number(cls.day))) dates.push(d.toISOString().split("T")[0]); d.setDate(d.getDate() + 1); } }
                     if (dates.length === 0) { addToast("No dates to schedule", "error"); return; }
                     const clashes = [];
-                    dates.forEach(dateStr => { const ls = new Date(dateStr + "T" + time + ":00").getTime(); const le = ls + dur * 60000; store.lessons.filter(l => l.status !== "cancelled" && new Date(l.date).toISOString().split("T")[0] === dateStr).forEach(l => { const s2 = new Date(l.date).getTime(); const e2 = s2 + (parseInt(l.duration) || 60) * 60000; if (ls < e2 && le > s2) { const n = getStudent(l.studentId); clashes.push(new Date(dateStr).toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " clashes with " + (n ? n.name : "?") + " at " + new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" })); } }); });
+                    dates.forEach(dateStr => { const ls = new Date(dateStr + "T" + time + ":00").getTime(); const le = ls + dur * 60000; store.lessons.filter(l => { if (l.status === "cancelled") return false; const ld = new Date(l.date); const lDateStr = ld.getFullYear() + "-" + String(ld.getMonth() + 1).padStart(2, "0") + "-" + String(ld.getDate()).padStart(2, "0"); return lDateStr === dateStr; }).forEach(l => { const s2 = new Date(l.date).getTime(); const e2 = s2 + (parseInt(l.duration) || 60) * 60000; if (ls < e2 && le > s2) { const n = getStudent(l.studentId); clashes.push(new Date(dateStr).toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " clashes with " + (n ? n.name : "?") + " at " + new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" })); } }); });
                     const total = dates.length * members.length;
                     let msg = "Create " + total + " lessons (" + dates.length + " dates \u00D7 " + members.length + " students)?";
                     if (clashes.length > 0) msg = "\u26A0\uFE0F " + clashes.length + " time clash(es):\n" + clashes.slice(0, 5).join("\n") + (clashes.length > 5 ? "\n+" + (clashes.length - 5) + " more" : "") + "\n\nProceed anyway?";
@@ -3728,3 +3735,4 @@ export default function TutorPulse() {
     </div>
   );
 }
+
