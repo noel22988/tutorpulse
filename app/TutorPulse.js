@@ -2267,10 +2267,10 @@ export default function TutorPulse() {
           const first = invoices[0];
           let msg = "Hi " + first.student.parent + ",\n\n";
           let grandTotal = 0;
-          invoices.forEach((inv) => {
+          invoices.forEach((inv, i) => {
             if (invoices.length > 1) msg += "\u2014\u2014\u2014 " + inv.student.name + " \u2014\u2014\u2014\n\n";
             msg += "Here is " + inv.student.name + "'s tuition summary for *" + inv.monthName + "*:\n\n";
-            msg += "[AI_SUMMARY_PLACEHOLDER]\n\n";
+            msg += "[AI_SUMMARY_" + i + "]\n\n";
             msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalHours + "h):*\n";
             inv.monthLessons.forEach((l) => { const d = new Date(l.date); msg += "  \u2022 " + d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true }) + " \u2014 " + l.subject + " (" + l.duration + " min)\n"; });
             msg += "\n";
@@ -2283,11 +2283,17 @@ export default function TutorPulse() {
           return msg;
         },
         buildAIPrompt: (sid) => {
-          const inv = buildStudentInvoice(sid);
-          if (!inv) return null;
-          const feedbackNotes = inv.monthLessons.filter(l => l.comment).map(l => l.subject + ": " + l.comment);
-          if (feedbackNotes.length === 0) return null;
-          return "You are " + (store.settings?.tutorName || "a tutor") + ". Based on these session feedback notes for " + inv.student.name + " (" + inv.student.level + " " + inv.student.stream + ") this month, write a factual 2-3 sentence summary for their parent. State what was covered, how the student performed, and specific areas to work on. Be direct and concise. Notes:\n" + feedbackNotes.join("\n") + "\n\nJust the summary paragraph, no greeting or sign-off. Keep under 60 words.";
+          const invoices = buildAllInvoices(sid);
+          const prompts = [];
+          invoices.forEach((inv, i) => {
+            const feedbackNotes = inv.monthLessons.filter(l => l.comment).map(l => l.subject + ": " + l.comment);
+            if (feedbackNotes.length > 0) {
+              prompts.push({ placeholder: "[AI_SUMMARY_" + i + "]", prompt: "You are " + (store.settings?.tutorName || "a tutor") + ". Based on these session feedback notes for " + inv.student.name + " (" + inv.student.level + " " + (inv.student.stream || "") + ") this month, write a factual 2-3 sentence summary for their parent. State what was covered, how the student performed, and specific areas to work on. Be direct and concise. Notes:\n" + feedbackNotes.join("\n") + "\n\nJust the summary paragraph, no greeting or sign-off. Keep under 60 words." });
+            } else {
+              prompts.push({ placeholder: "[AI_SUMMARY_" + i + "]", prompt: null });
+            }
+          });
+          return prompts;
         },
       },
       {
@@ -2516,7 +2522,7 @@ export default function TutorPulse() {
                 const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: p.prompt }] }) });
                 const data = await response.json();
                 const summary = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
-                msg = msg.replace(p.placeholder, summary || "(No feedback recorded)");
+                msg = msg.replace(p.placeholder, summary ? (p.placeholder.includes("SUMMARY") ? "\uD83D\uDCCA *Monthly Progress:*\n" + summary : summary) : "(No feedback recorded)");
               } else {
                 msg = msg.replace(p.placeholder, "(No session feedback recorded this month)");
               }
@@ -2525,30 +2531,9 @@ export default function TutorPulse() {
             aiResult.forEach(p => { msg = msg.replace(p.placeholder, "(AI unavailable)"); });
           }
           setMsgGenerating(false);
-        } else if (typeof aiResult === "string") {
-          // Single AI prompt (fee invoice)
-          setMsgText(msg.replace("[AI_SUMMARY_PLACEHOLDER]", "\u23F3 _Generating..._"));
-          setMsgGenerating(true);
-          try {
-            const response = await fetch("/api/ai", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: aiResult }] }),
-            });
-            const data = await response.json();
-            const summary = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
-            if (summary) {
-              msg = msg.replace("[AI_SUMMARY_PLACEHOLDER]", "\uD83D\uDCCA *Monthly Progress:*\n" + summary);
-            } else {
-              msg = msg.replace("[AI_SUMMARY_PLACEHOLDER]", "");
-            }
-          } catch (err) {
-            msg = msg.replace("[AI_SUMMARY_PLACEHOLDER]", "");
-          }
-          setMsgGenerating(false);
         } else {
-          // No prompt available
-          msg = msg.replace("[AI_SUMMARY_PLACEHOLDER]\n\n", "");
+          // No AI prompts — strip any remaining placeholders
+          msg = msg.replace(/\[AI_SUMMARY_\d+\]\n?\n?/g, "").replace(/\[AI_PROGRESS_\d+\]\n?\n?/g, "");
         }
       }
 
@@ -2751,7 +2736,7 @@ export default function TutorPulse() {
                       const tpl = templateDefs.find((t) => t.id === activeTemplate);
                       if (tpl) {
                         personalMsg = tpl.generate(recipient.studentId);
-                        personalMsg = personalMsg.replace("[AI_SUMMARY_PLACEHOLDER]\n\n", "").replace("[AI_SUMMARY_PLACEHOLDER]", "").replace(/\[AI_PROGRESS_\d+\]/g, "");
+                        personalMsg = personalMsg.replace(/\[AI_SUMMARY_\d+\]\n?\n?/g, "").replace(/\[AI_PROGRESS_\d+\]\n?\n?/g, "");
                       }
                     } else {
                       personalMsg = personalizeMessage(txt, recipient);
@@ -2763,7 +2748,7 @@ export default function TutorPulse() {
                       const tpl = templateDefs.find((t) => t.id === activeTemplate);
                       if (tpl) {
                         let nextMsg = tpl.generate(selectedList[nextIdx + 1].studentId);
-                        nextMsg = nextMsg.replace("[AI_SUMMARY_PLACEHOLDER]\n\n", "").replace("[AI_SUMMARY_PLACEHOLDER]", "").replace(/\[AI_PROGRESS_\d+\]/g, "");
+                        nextMsg = nextMsg.replace(/\[AI_SUMMARY_\d+\]\n?\n?/g, "").replace(/\[AI_PROGRESS_\d+\]\n?\n?/g, "");
                         setMsgText(nextMsg);
                       }
                     }
