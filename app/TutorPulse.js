@@ -474,6 +474,7 @@ export default function TutorPulse() {
   const [classSchedDate, setClassSchedDate] = useState(new Date().toISOString().split("T")[0]);
   const [classSchedEndDate, setClassSchedEndDate] = useState("");
   const [classSchedRecurring, setClassSchedRecurring] = useState(false);
+  const [classSchedType, setClassSchedType] = useState("single"); // "single", "weekly", "daily"
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiHistory, setAiHistory] = useState([]);
@@ -1992,7 +1993,7 @@ export default function TutorPulse() {
   const [deletedLesson, setDeletedLesson] = useState(null);
   const [returnToStudentId, setReturnToStudentId] = useState(null);
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
-  const bulkDeleteIdsRef = useRef([]);
+  const [bulkDeleteIds, setBulkDeleteIds] = useState(new Set());
   const [bulkDeleteCount, setBulkDeleteCount] = useState(0);
   const toggleBulkId = (id) => {
     const ids = bulkDeleteIdsRef.current;
@@ -3209,14 +3210,33 @@ export default function TutorPulse() {
                 const subs = s && s.subjects && s.subjects.length > 0 ? s.subjects : (s ? [{ subject: s.subject || "Lesson", stream: s.stream || "" }] : [{ subject: "Lesson", stream: "" }]);
                 const subj = lessonForm.subject || (subs[0].subject + (subs[0].stream ? " (" + subs[0].stream + ")" : ""));
                 const fullSubject = lessonForm.topic ? subj + " — " + lessonForm.topic : subj;
+                // Clash detection helper
+                const checkClash = (dateISO, dur) => {
+                  const ls = new Date(dateISO).getTime(); const le = ls + dur * 60000;
+                  const clashes = [];
+                  store.lessons.filter(l => l.status !== "cancelled").forEach(l => {
+                    const s2 = new Date(l.date).getTime(); const e2 = s2 + l.duration * 60000;
+                    if (ls < e2 && le > s2) {
+                      const n = getStudent(l.studentId);
+                      const isSameStudent = l.studentId === sid;
+                      clashes.push((isSameStudent ? "⚠️ Same student: " : "🕐 Tutor busy: ") + (n ? n.name : "?") + " at " + new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }));
+                    }
+                  });
+                  return clashes;
+                };
                 if (isRecurring) {
                   if (previewDates.length === 0) { addToast("Set start and end dates", "error"); return; }
                   const h = parseInt(recurTime.split(":")[0]), m = parseInt(recurTime.split(":")[1]);
+                  let allClashes = [];
+                  previewDates.forEach(d => { const dt = new Date(d); dt.setHours(h, m, 0, 0); allClashes = allClashes.concat(checkClash(dt.toISOString(), actualDuration)); });
+                  if (allClashes.length > 0 && !window.confirm("⚠️ " + allClashes.length + " clash(es):\n" + allClashes.slice(0, 5).join("\n") + (allClashes.length > 5 ? "\n+" + (allClashes.length - 5) + " more" : "") + "\n\nSchedule anyway?")) return;
                   previewDates.forEach((d) => { const dt = new Date(d); dt.setHours(h, m, 0, 0); addLesson({ studentId: sid, date: dt.toISOString(), duration: actualDuration, subject: fullSubject, status: "confirmed", location: lessonForm.location, comment: "" }); });
                   addToast(previewDates.length + " lessons scheduled!");
                 } else {
                   if (!lessonForm.date) { addToast("Please select a date", "error"); return; }
                   const dt = new Date(lessonForm.date + "T" + lessonForm.time + ":00");
+                  const clashes = checkClash(dt.toISOString(), actualDuration);
+                  if (clashes.length > 0 && !window.confirm("⚠️ Time clash:\n" + clashes.join("\n") + "\n\nSchedule anyway?")) return;
                   addLesson({ studentId: sid, date: dt.toISOString(), duration: actualDuration, subject: fullSubject, status: "pending", location: lessonForm.location, comment: "" });
                 }
                 setLessonForm({ studentId: "", date: "", time: "10:00", duration: "90", customDuration: "", subject: "", location: "Home Studio" });
@@ -3422,27 +3442,23 @@ export default function TutorPulse() {
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, letterSpacing: 0.5 }}>LESSONS ({studentLessons.length})</div>
-                {studentLessons.length > 0 && (<button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); bulkDeleteIdsRef.current = []; setBulkDeleteCount(0); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{bulkDeleteMode ? "Done" : "Bulk Delete"}</button>)}
+                {studentLessons.length > 0 && (<button onClick={() => { setBulkDeleteMode(!bulkDeleteMode); setBulkDeleteIds(new Set()); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, color: bulkDeleteMode ? theme.accent : theme.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{bulkDeleteMode ? "Done" : "Bulk Delete"}</button>)}
               </div>
               {bulkDeleteMode && (
-                <div id="bulk-bar" style={{ display: bulkDeleteCount > 0 ? "flex" : "none", gap: 8, alignItems: "center", marginBottom: 10, padding: "8px 12px", background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "44", position: "sticky", top: 0, zIndex: 2 }}>
-                  <span id="bulk-count" style={{ fontSize: 12, color: theme.danger, fontWeight: 600, flex: 1 }}>{bulkDeleteCount} selected</span>
-                  <button onClick={() => { bulkDeleteIdsRef.current = studentLessons.map(l => l.id); setBulkDeleteCount(studentLessons.length); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>Select All</button>
-                  <button onClick={() => { const ids = bulkDeleteIdsRef.current; if (window.confirm("Delete " + ids.length + " lessons?")) { setStore((s) => ({ ...s, lessons: s.lessons.filter(l => !ids.includes(l.id)) })); addToast(ids.length + " lessons deleted"); bulkDeleteIdsRef.current = []; setBulkDeleteCount(0); setBulkDeleteMode(false); } }} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: theme.danger, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Delete</button>
+                <div id="bulk-bar" style={{ display: bulkDeleteIds.size > 0 ? "flex" : "none", gap: 8, alignItems: "center", marginBottom: 10, padding: "8px 12px", background: theme.dangerBg, borderRadius: 10, border: "1px solid " + theme.danger + "44", position: "sticky", top: 0, zIndex: 2 }}>
+                  <span id="bulk-count" style={{ fontSize: 12, color: theme.danger, fontWeight: 600, flex: 1 }}>{bulkDeleteIds.size} selected</span>
+                  <button onClick={() => { setBulkDeleteIds(new Set(studentLessons.map(l => l.id))); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: theme.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>Select All</button>
+                  <button onClick={() => { const ids = Array.from(bulkDeleteIds); if (window.confirm("Delete " + ids.length + " lessons?")) { setStore((s) => ({ ...s, lessons: s.lessons.filter(l => !ids.includes(l.id)) })); addToast(ids.length + " lessons deleted"); setBulkDeleteIds(new Set()); setBulkDeleteMode(false); } }} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: theme.danger, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Delete</button>
                 </div>
               )}
               {studentLessons.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, padding: "8px 0" }}>No lessons yet</div>}
               {studentLessons.map((l) => (
                 <div key={l.id} style={{ padding: "10px 0", borderBottom: "1px solid " + theme.border, cursor: "pointer", display: "flex", gap: 10, alignItems: "flex-start" }} onClick={(e) => {
                   if (bulkDeleteMode) {
-                    const ids = bulkDeleteIdsRef.current; const isSelected = ids.includes(l.id);
-                    bulkDeleteIdsRef.current = isSelected ? ids.filter(x => x !== l.id) : [...ids, l.id];
-                    const cb = e.currentTarget.querySelector("[data-cb]");
-                    if (cb) { const now = !isSelected; cb.style.borderColor = now ? theme.danger : theme.borderLight; cb.style.background = now ? theme.danger : "transparent"; cb.innerHTML = now ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''; }
-                    const countEl = document.getElementById("bulk-count"); const count = bulkDeleteIdsRef.current.length; if (countEl) countEl.textContent = count + " selected"; const bar = document.getElementById("bulk-bar"); if (bar) bar.style.display = count > 0 ? "flex" : "none";
+                    const s = new Set(bulkDeleteIds); if (s.has(l.id)) s.delete(l.id); else s.add(l.id); setBulkDeleteIds(s);
                   } else { setReturnToStudentId(selectedStudent.id); setSelectedStudent(null); setSelectedLesson(l); setLessonComment(l.comment || ""); }
                 }}>
-                  {bulkDeleteMode && (<div data-cb="1" style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + theme.borderLight, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}></div>)}
+                  {bulkDeleteMode && (<div style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (bulkDeleteIds.has(l.id) ? theme.danger : theme.borderLight), background: bulkDeleteIds.has(l.id) ? theme.danger : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 4 }}>{bulkDeleteIds.has(l.id) && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}</div>)}
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                       <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500 }}>{l.subject}{l.waiveFee && <span style={{ fontSize: 10, color: theme.purple, marginLeft: 6 }}>WAIVED{l.waiveReason ? " · " + l.waiveReason : ""}{l.waiveReason === "Other" && l.waiveNote ? ": " + l.waiveNote : ""}</span>}{l.collectedButCancelled && <span style={{ fontSize: 10, color: theme.warning, marginLeft: 6 }}>CBC</span>}{l.status === "cancelled" && l.cancelReason && <span style={{ fontSize: 10, color: theme.danger, marginLeft: 6 }}>{l.cancelReason}{l.cancelReason === "Other" && l.cancelNote ? ": " + l.cancelNote : ""}</span>}{l.excludeFromBilling && !l.waiveFee && <span style={{ fontSize: 10, color: theme.danger, marginLeft: 6 }}>EXCL</span>}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{formatDate(l.date)} · {formatTime(l.date)} · {l.duration} min</div></div>
@@ -3566,68 +3582,66 @@ export default function TutorPulse() {
             {/* Schedule for class */}
             {!classSchedMode ? (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Button size="sm" icon="calendar" onClick={() => setClassSchedMode(true)}>Schedule Class</Button>
+                <Button size="sm" icon="calendar" onClick={() => { setClassSchedMode(true); setClassSchedType("single"); setClassSchedEndDate(""); }}>Schedule Class</Button>
                 <Button size="sm" variant="ghost" icon="message" onClick={() => { setBroadcastClassId(cls.id); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); setBroadcastMsg(""); setShowBroadcast(true); setSelectedClass(null); }}>Broadcast</Button>
-                <Button size="sm" variant="secondary" icon="edit" onClick={() => { setEditingClass(cls); setSelectedClass(null); }}>Edit</Button>
+                <Button size="sm" variant="secondary" icon="edit" onClick={() => { setClassForm({ ...cls, day: cls.day !== undefined ? String(cls.day) : "", duration: String(cls.duration || 90) }); setEditingClass(cls); setSelectedClass(null); }}>Edit</Button>
                 <Button size="sm" variant="ghost" icon="trash" onClick={() => { if (window.confirm("Delete class \"" + cls.name + "\"? Students won't be deleted.")) { deleteClass(cls.id); setSelectedClass(null); addToast("Class deleted"); } }} style={{ color: theme.danger }}>Delete</Button>
               </div>
             ) : (
               <Card style={{ padding: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: theme.accent, marginBottom: 10 }}>Schedule lessons for {members.length} students</div>
                 <div style={{ display: "flex", gap: 2, background: theme.bgInput, borderRadius: 10, padding: 3, marginBottom: 12 }}>
-                  <button onClick={() => setClassSchedRecurring(false)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: !classSchedRecurring ? theme.bgElevated : "transparent", color: !classSchedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Single Date</button>
-                  <button onClick={() => setClassSchedRecurring(true)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: classSchedRecurring ? theme.bgElevated : "transparent", color: classSchedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Recurring</button>
+                  {["single", "weekly", "daily"].map(t => (
+                    <button key={t} onClick={() => setClassSchedType(t)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: classSchedType === t ? theme.bgElevated : "transparent", color: classSchedType === t ? theme.text : theme.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textTransform: "capitalize" }}>{t}</button>
+                  ))}
                 </div>
-                {!classSchedRecurring ? (
+                {classSchedType === "single" ? (
                   <Input label="Date" type="date" value={classSchedDate} onChange={setClassSchedDate} />
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <Input label="From" type="date" value={classSchedDate} onChange={setClassSchedDate} />
-                    <Input label="To" type="date" value={classSchedEndDate} onChange={setClassSchedEndDate} />
+                    <Input label="To (required)" type="date" value={classSchedEndDate} onChange={setClassSchedEndDate} />
                   </div>
                 )}
-                {classSchedRecurring && cls.day !== undefined && cls.day !== "" && (() => {
+                {classSchedType !== "single" && classSchedEndDate && (() => {
                   const dates = [];
                   const start = new Date(classSchedDate + "T00:00:00");
-                  const end = classSchedEndDate ? new Date(classSchedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+                  const end = new Date(classSchedEndDate + "T00:00:00");
                   const d = new Date(start);
-                  while (d <= end) { if (d.getDay() === Number(cls.day)) dates.push(new Date(d)); d.setDate(d.getDate() + 1); }
-                  return dates.length > 0 && (
+                  while (d <= end) {
+                    if (classSchedType === "daily" || (classSchedType === "weekly" && cls.day !== undefined && cls.day !== "" && d.getDay() === Number(cls.day))) dates.push(new Date(d));
+                    d.setDate(d.getDate() + 1);
+                  }
+                  return dates.length > 0 ? (
                     <div style={{ marginBottom: 12, padding: 10, background: theme.bgInput, borderRadius: 8 }}>
                       <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4 }}>PREVIEW — {dates.length} sessions × {members.length} students = {dates.length * members.length} lessons</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{dates.slice(0, 12).map((dt, i) => (<span key={i} style={{ padding: "2px 8px", borderRadius: 6, background: theme.bgElevated, fontSize: 11, color: theme.textSecondary }}>{dt.toLocaleDateString("en-SG", { day: "numeric", month: "short" })}</span>))}{dates.length > 12 && <span style={{ fontSize: 11, color: theme.textMuted }}>+{dates.length - 12} more</span>}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{dates.slice(0, 14).map((dt, i) => (<span key={i} style={{ padding: "2px 8px", borderRadius: 6, background: theme.bgElevated, fontSize: 11, color: theme.textSecondary }}>{dt.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" })}</span>))}{dates.length > 14 && <span style={{ fontSize: 11, color: theme.textMuted }}>+{dates.length - 14} more</span>}</div>
                     </div>
-                  );
+                  ) : <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12 }}>{classSchedType === "weekly" && (cls.day === undefined || cls.day === "") ? "Set a day of week in class settings first" : "No matching dates in range"}</div>;
                 })()}
                 <div style={{ display: "flex", gap: 8 }}>
                   <Button size="sm" onClick={() => {
                     if (members.length === 0) { addToast("No students in class", "error"); return; }
+                    if (classSchedType !== "single" && !classSchedEndDate) { addToast("Please set an end date", "error"); return; }
                     const time = cls.time || "15:00";
                     const dur = cls.duration || 90;
                     const subj = (cls.subject || "Lesson") + (cls.stream ? " (" + cls.stream + ")" : "");
                     let dates = [];
-                    if (classSchedRecurring && cls.day !== undefined && cls.day !== "") {
-                      const start = new Date(classSchedDate + "T00:00:00");
-                      const end = classSchedEndDate ? new Date(classSchedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
-                      const d = new Date(start);
-                      while (d <= end) { if (d.getDay() === Number(cls.day)) dates.push(d.toISOString().split("T")[0]); d.setDate(d.getDate() + 1); }
-                    } else {
-                      dates = [classSchedDate];
-                    }
+                    if (classSchedType === "single") { dates = [classSchedDate]; }
+                    else { const start = new Date(classSchedDate + "T00:00:00"); const end = new Date(classSchedEndDate + "T00:00:00"); const d = new Date(start); while (d <= end) { if (classSchedType === "daily" || (classSchedType === "weekly" && cls.day !== undefined && d.getDay() === Number(cls.day))) dates.push(d.toISOString().split("T")[0]); d.setDate(d.getDate() + 1); } }
                     if (dates.length === 0) { addToast("No dates to schedule", "error"); return; }
+                    const clashes = [];
+                    dates.forEach(dateStr => { const ls = new Date(dateStr + "T" + time + ":00").getTime(); const le = ls + dur * 60000; store.lessons.filter(l => l.status !== "cancelled").forEach(l => { const s2 = new Date(l.date).getTime(); const e2 = s2 + l.duration * 60000; if (ls < e2 && le > s2) { const n = getStudent(l.studentId); clashes.push(new Date(dateStr).toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " clashes with " + (n ? n.name : "?") + " at " + new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" })); } }); });
                     const total = dates.length * members.length;
-                    if (!window.confirm("Create " + total + " lessons (" + dates.length + " dates × " + members.length + " students)?")) return;
+                    let msg = "Create " + total + " lessons (" + dates.length + " dates \u00D7 " + members.length + " students)?";
+                    if (clashes.length > 0) msg = "\u26A0\uFE0F " + clashes.length + " time clash(es):\n" + clashes.slice(0, 5).join("\n") + (clashes.length > 5 ? "\n+" + (clashes.length - 5) + " more" : "") + "\n\nProceed anyway?";
+                    if (!window.confirm(msg)) return;
                     const newLessons = [];
-                    dates.forEach(dateStr => {
-                      members.forEach(s => {
-                        const dt = new Date(dateStr + "T" + time + ":00");
-                        newLessons.push({ id: "l" + genId(), studentId: s.id, date: dt.toISOString(), duration: dur, subject: subj, location: cls.location || "Home Studio", status: "confirmed", classId: cls.id });
-                      });
-                    });
+                    dates.forEach(dateStr => { members.forEach(s => { const dt = new Date(dateStr + "T" + time + ":00"); newLessons.push({ id: "l" + genId(), studentId: s.id, date: dt.toISOString(), duration: dur, subject: subj, location: cls.location || "Home Studio", status: "confirmed", classId: cls.id }); }); });
                     setStore(prev => ({ ...prev, lessons: [...prev.lessons, ...newLessons] }));
                     addToast(total + " lessons created");
                     setClassSchedMode(false);
-                  }}>Create {classSchedRecurring ? "Recurring" : ""} Lessons</Button>
+                  }}>Create Lessons</Button>
                   <Button size="sm" variant="secondary" onClick={() => setClassSchedMode(false)}>Cancel</Button>
                 </div>
               </Card>
@@ -3679,7 +3693,7 @@ export default function TutorPulse() {
                       setBroadcastSentIdx(nextIdx);
                       if (nextIdx === selectedList.length - 1) addToast("All " + selectedList.length + " messages sent!");
                     }} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 20px", borderRadius: 12, border: "none", background: "#25D366", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(37, 211, 102, 0.3)" }}>
-                      <WAIcon />
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" style={{ flexShrink: 0 }}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                       {broadcastSentIdx === -1 ? "Send to " + (selectedList[0]?.parent || selectedList[0]?.name) + " (1/" + selectedList.length + ")" : "Next: " + (selectedList[broadcastSentIdx + 1]?.parent || selectedList[broadcastSentIdx + 1]?.name) + " (" + (broadcastSentIdx + 2) + "/" + selectedList.length + ")"}
                     </button>
                   ) : (
