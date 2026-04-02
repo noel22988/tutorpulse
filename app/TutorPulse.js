@@ -455,18 +455,25 @@ export default function TutorPulse() {
   const [newLessonForStudent, setNewLessonForStudent] = useState(null);
   const [showNewStudent, setShowNewStudent] = useState(false);
   const [showMessageCompose, setShowMessageCompose] = useState(null);
-  const [messageTarget, setMessageTarget] = useState("parent"); // "parent" or "student"
+  const [messageTarget, setMessageTarget] = useState("parent");
+  const [includeSiblings, setIncludeSiblings] = useState(false); // "parent" or "student"
   const [showAI, setShowAI] = useState(false);
   // Class state
   const [studentsTab, setStudentsTab] = useState("students"); // "students" or "classes"
   const [selectedClass, setSelectedClass] = useState(null);
   const [showNewClass, setShowNewClass] = useState(false);
   const [editingClass, setEditingClass] = useState(false);
+  const [classForm, setClassForm] = useState({ name: "", day: "", time: "15:00", duration: "90", location: "Home Studio", subject: "Chinese", stream: "Standard", studentIds: [], notes: "", status: "active" });
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastClassId, setBroadcastClassId] = useState(null);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcastRecipients, setBroadcastRecipients] = useState(new Set());
   const [broadcastSentIdx, setBroadcastSentIdx] = useState(-1);
+  const broadcastRef = useRef(null);
+  const [classSchedMode, setClassSchedMode] = useState(false);
+  const [classSchedDate, setClassSchedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [classSchedEndDate, setClassSchedEndDate] = useState("");
+  const [classSchedRecurring, setClassSchedRecurring] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiHistory, setAiHistory] = useState([]);
@@ -1013,7 +1020,7 @@ export default function TutorPulse() {
                   </div>
                   <div style={{ display: "flex", gap: 3 }}>
                     {student.parentPhone && (
-                      <button onClick={(e) => { e.stopPropagation(); setMessageTarget("parent"); setShowMessageCompose(student.id); }} style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 2 }}>
+                      <button onClick={(e) => { e.stopPropagation(); setMessageTarget("parent"); setIncludeSiblings(false); setShowMessageCompose(student.id); }} style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 2 }}>
                         <svg width="9" height="9" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>Parent
                       </button>
                     )}
@@ -2164,6 +2171,14 @@ export default function TutorPulse() {
     const isBulk = showMessageCompose === "bulk";
     const student = !isBulk ? getStudent(showMessageCompose) : null;
 
+    // Detect siblings (same parent phone)
+    const siblings = useMemo(() => {
+      if (!student || !student.parentPhone || isBulk) return [];
+      const phone = formatPhoneForWA(student.parentPhone);
+      if (!phone || phone.length < 6) return [];
+      return store.students.filter(s => s.id !== student.id && formatPhoneForWA(s.parentPhone) === phone);
+    }, [student, isBulk, store.students]);
+
     // Compute bulk recipients early (before other hooks that might reference it)
     const bulkRecipients = useMemo(() => {
       if (!isBulk) return [];
@@ -2223,6 +2238,18 @@ export default function TutorPulse() {
       };
     }, [store.lessons, store.payments, getStudent, invoiceMonth]);
 
+    // Build combined invoice for student + siblings
+    const buildAllInvoices = useCallback((sid) => {
+      const invoices = [buildStudentInvoice(sid)];
+      if (includeSiblings && siblings.length > 0) {
+        siblings.forEach(sib => {
+          const inv = buildStudentInvoice(sib.id);
+          if (inv) invoices.push(inv);
+        });
+      }
+      return invoices.filter(Boolean);
+    }, [buildStudentInvoice, includeSiblings, siblings]);
+
     // ── Template generators ──────────────────────────────────
     const tName = store.settings?.tutorName || "Your Tutor";
     const payMode = store.settings?.paymentMode || "phone";
@@ -2271,25 +2298,32 @@ export default function TutorPulse() {
         id: "invoice_simple", label: "\uD83D\uDCCB Simple Invoice", icon: "dollar",
         desc: "Lesson dates + fee breakdown (no AI summary)",
         generate: (sid) => {
-          const inv = buildStudentInvoice(sid);
-          if (!inv) return "";
-          let msg = "Hi " + inv.student.parent + ",\n\n";
-          msg += "Here is " + inv.student.name + "'s tuition summary for *" + inv.monthName + "*:\n\n";
-          msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalHours + "h):*\n";
-          inv.monthLessons.forEach((l) => {
-            const d = new Date(l.date);
-            const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
-            const timeStr = d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true });
-            msg += "  \u2022 " + dayStr + ", " + timeStr + " \u2014 " + l.subject + " (" + l.duration + " min)\n";
+          const invoices = buildAllInvoices(sid);
+          if (invoices.length === 0) return "";
+          const first = invoices[0];
+          let msg = "Hi " + first.student.parent + ",\n\n";
+          let grandTotal = 0;
+          invoices.forEach((inv, i) => {
+            if (invoices.length > 1) msg += "\u2014\u2014\u2014 " + inv.student.name + " \u2014\u2014\u2014\n\n";
+            msg += "Here is " + inv.student.name + "'s tuition summary for *" + inv.monthName + "*:\n\n";
+            msg += "\uD83D\uDCDA *Lessons (" + inv.totalSessions + " sessions, " + inv.totalHours + "h):*\n";
+            inv.monthLessons.forEach((l) => {
+              const d = new Date(l.date);
+              const dayStr = d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
+              const timeStr = d.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: true });
+              msg += "  \u2022 " + dayStr + ", " + timeStr + " \u2014 " + l.subject + " (" + l.duration + " min)\n";
+            });
+            msg += "\n";
+            if (inv.cancelledLessons.length > 0) {
+              msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) excluded\n\n";
+            }
+            msg += "\uD83D\uDCB0 *Fee:* " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr = *$" + inv.finalAmount.toFixed(2) + "*\n\n";
+            grandTotal += inv.finalAmount;
           });
-          msg += "\n";
-          if (inv.cancelledLessons.length > 0) {
-            msg += "\u274C *Cancelled:* " + inv.cancelledLessons.length + " session(s) excluded\n\n";
+          if (invoices.length > 1) {
+            msg += "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
+            msg += "\uD83D\uDCB0 *Combined Total: $" + grandTotal.toFixed(2) + "*\n\n";
           }
-          msg += "\uD83D\uDCB0 *Fee Breakdown:*\n";
-          msg += "  " + inv.totalHours + "h \u00D7 $" + inv.hourlyRate + "/hr\n";
-          msg += "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
-          msg += "  *Total Due: $" + inv.finalAmount.toFixed(2) + "*\n\n";
           msg += "\uD83D\uDCB3 *Payment:* " + payInfo + "\nPlease pay by the 10th. Thank you! \uD83D\uDE4F\n\n\u2014 " + tName;
           return msg;
         },
@@ -2518,7 +2552,7 @@ export default function TutorPulse() {
     );
 
     return (
-      <Modal open={!!showMessageCompose} onClose={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); setMessageTarget("parent"); }} title={isBulk ? "Fee Reminders via WhatsApp" : "WhatsApp " + (student ? (messageTarget === "student" ? student.name : student.parent) : "")} width={540}>
+      <Modal open={!!showMessageCompose} onClose={() => { setShowMessageCompose(null); setMsgText(""); setBulkSentIndex(-1); setBulkSelected(new Set()); setBulkPreviewIdx(null); setMsgActiveTemplate(null); setMessageTarget("parent"); setIncludeSiblings(false); }} title={isBulk ? "Fee Reminders via WhatsApp" : "WhatsApp " + (student ? (messageTarget === "student" ? student.name : student.parent) : "")} width={540}>
 
         {/* Single: parent card */}
         {!isBulk && student && (
@@ -2533,6 +2567,18 @@ export default function TutorPulse() {
                 → {messageTarget === "parent" ? "Student" : "Parent"}
               </button>
             )}
+          </div>
+        )}
+        {/* Sibling detection */}
+        {!isBulk && student && siblings.length > 0 && (
+          <div style={{ marginBottom: 12, padding: 10, background: theme.bgElevated, borderRadius: 10, border: "1px solid " + theme.border }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={includeSiblings} onChange={() => setIncludeSiblings(!includeSiblings)} style={{ accentColor: theme.accent, cursor: "pointer" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: includeSiblings ? theme.accent : theme.textSecondary }}>Include sibling{siblings.length > 1 ? "s" : ""}: {siblings.map(s => s.name).join(", ")}</div>
+                <div style={{ fontSize: 10, color: theme.textMuted }}>Combine into one message to {student.parent}</div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -3081,7 +3127,7 @@ export default function TutorPulse() {
                 <Button size="sm" variant="secondary" icon="repeat" onClick={() => { updateLesson(selectedLesson.id, { status: "confirmed" }); setSelectedLesson({ ...selectedLesson, status: "confirmed" }); addToast("Lesson reverted to confirmed"); }}>Revert to Confirmed</Button>
               )}
               <Button size="sm" variant="secondary" icon="edit" onClick={startLessonEdit}>Edit Lesson</Button>
-              <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); setMessageTarget("parent"); if (lessonDetailStudent) setShowMessageCompose(selectedLesson.studentId); }}>Message Parent</Button>
+              <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); setMessageTarget("parent"); setIncludeSiblings(false); if (lessonDetailStudent) setShowMessageCompose(selectedLesson.studentId); }}>Message Parent</Button>
               {lessonDetailStudent && lessonDetailStudent.studentPhone && (
                 <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedLesson(null); setMessageTarget("student"); setShowMessageCompose(selectedLesson.studentId); }} style={{ color: "#25D366" }}>Message Student</Button>
               )}
@@ -3417,7 +3463,7 @@ export default function TutorPulse() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button size="sm" icon="edit" variant="secondary" onClick={startEdit}>Edit Details</Button>
                 <Button size="sm" icon="calendar" onClick={() => { setPrefillStudentId(selectedStudent.id); setSelectedStudent(null); setShowNewLesson(true); }}>Schedule Lesson</Button>
-                <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setMessageTarget("parent"); setShowMessageCompose(selectedStudent.id); }}>Message Parent</Button>
+                <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setMessageTarget("parent"); setIncludeSiblings(false); setShowMessageCompose(selectedStudent.id); }}>Message Parent</Button>
                 {selectedStudent.studentPhone && (
                   <Button size="sm" variant="ghost" icon="message" onClick={() => { setSelectedStudent(null); setMessageTarget("student"); setShowMessageCompose(selectedStudent.id); }} style={{ color: "#25D366" }}>Message Student</Button>
                 )}
@@ -3440,8 +3486,6 @@ export default function TutorPulse() {
       {/* ── Add/Edit Class Modal ──────────────────────────────── */}
       {(showNewClass || editingClass) && (() => {
         const isEdit = !!editingClass;
-        const initial = isEdit ? editingClass : { name: "", day: "", time: "15:00", duration: "90", location: "Home Studio", subject: "Chinese", stream: "Standard", studentIds: [], notes: "", status: "active" };
-        const [classForm, setClassForm] = useState(initial);
         const uc = (k, v) => setClassForm(f => ({ ...f, [k]: v }));
         const sortedStudents = [...store.students].filter(s => s.status === "active" || s.status === "trial").sort((a, b) => a.name.localeCompare(b.name));
         const toggleStudent = (sid) => {
@@ -3451,14 +3495,14 @@ export default function TutorPulse() {
           uc("studentIds", ids);
         };
         return (
-          <Modal open={true} onClose={() => { setShowNewClass(false); setEditingClass(false); }} title={isEdit ? "Edit Class" : "Add New Class"} width={540}>
+          <Modal open={true} onClose={() => { setShowNewClass(false); setEditingClass(false); setClassForm({ name: "", day: "", time: "15:00", duration: "90", location: "Home Studio", subject: "Chinese", stream: "Standard", studentIds: [], notes: "", status: "active" }); }} title={isEdit ? "Edit Class" : "Add New Class"} width={540}>
             <Input label="Class Name" value={classForm.name} onChange={(v) => uc("name", v)} placeholder="e.g. Sec 3 Chinese Mon 3pm" />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Select label="Day" value={classForm.day} onChange={(v) => uc("day", v)} options={[{ value: "", label: "— No fixed day —" }, ...dayNames.map((d, i) => ({ value: String(i), label: d }))]} />
+              <Select label="Day" value={String(classForm.day ?? "")} onChange={(v) => uc("day", v)} options={[{ value: "", label: "— No fixed day —" }, ...dayNames.map((d, i) => ({ value: String(i), label: d }))]} />
               <Input label="Time" type="time" value={classForm.time} onChange={(v) => uc("time", v)} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Select label="Duration" value={classForm.duration} onChange={(v) => uc("duration", v)} options={[{ value: "30", label: "30 min" }, { value: "45", label: "45 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }]} />
+              <Select label="Duration" value={String(classForm.duration)} onChange={(v) => uc("duration", v)} options={[{ value: "30", label: "30 min" }, { value: "45", label: "45 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }]} />
               <Select label="Location" value={classForm.location} onChange={(v) => uc("location", v)} options={[{ value: "Home Studio", label: "Home Studio" }, { value: "Online — Zoom", label: "Online — Zoom" }, { value: "Student's Home", label: "Student's Home" }]} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -3484,9 +3528,9 @@ export default function TutorPulse() {
                 const data = { ...classForm, day: classForm.day !== "" ? Number(classForm.day) : undefined, duration: parseInt(classForm.duration) || 90 };
                 if (isEdit) { updateClass(editingClass.id, data); setSelectedClass({ ...editingClass, ...data }); addToast("Class updated"); }
                 else { addClass(data); addToast("Class created"); }
-                setShowNewClass(false); setEditingClass(false);
+                setShowNewClass(false); setEditingClass(false); setClassForm({ name: "", day: "", time: "15:00", duration: "90", location: "Home Studio", subject: "Chinese", stream: "Standard", studentIds: [], notes: "", status: "active" });
               }}>{isEdit ? "Save Changes" : "Create Class"}</Button>
-              <Button variant="secondary" onClick={() => { setShowNewClass(false); setEditingClass(false); }}>Cancel</Button>
+              <Button variant="secondary" onClick={() => { setShowNewClass(false); setEditingClass(false); setClassForm({ name: "", day: "", time: "15:00", duration: "90", location: "Home Studio", subject: "Chinese", stream: "Standard", studentIds: [], notes: "", status: "active" }); }}>Cancel</Button>
             </div>
           </Modal>
         );
@@ -3496,10 +3540,7 @@ export default function TutorPulse() {
       {selectedClass && (() => {
         const cls = getClass(selectedClass.id) || selectedClass;
         const members = (cls.studentIds || []).map(id => getStudent(id)).filter(Boolean);
-        const [scheduleMode, setScheduleMode] = useState(false);
-        const [schedDate, setSchedDate] = useState(new Date().toISOString().split("T")[0]);
-        const [schedEndDate, setSchedEndDate] = useState("");
-        const [schedRecurring, setSchedRecurring] = useState(false);
+        // Using parent-level classSchedMode/Date/EndDate/Recurring state
         return (
           <Modal open={true} onClose={() => { setSelectedClass(null); }} title={cls.name} width={540}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
@@ -3523,9 +3564,9 @@ export default function TutorPulse() {
             </div>
 
             {/* Schedule for class */}
-            {!scheduleMode ? (
+            {!classSchedMode ? (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Button size="sm" icon="calendar" onClick={() => setScheduleMode(true)}>Schedule Class</Button>
+                <Button size="sm" icon="calendar" onClick={() => setClassSchedMode(true)}>Schedule Class</Button>
                 <Button size="sm" variant="ghost" icon="message" onClick={() => { setBroadcastClassId(cls.id); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); setBroadcastMsg(""); setShowBroadcast(true); setSelectedClass(null); }}>Broadcast</Button>
                 <Button size="sm" variant="secondary" icon="edit" onClick={() => { setEditingClass(cls); setSelectedClass(null); }}>Edit</Button>
                 <Button size="sm" variant="ghost" icon="trash" onClick={() => { if (window.confirm("Delete class \"" + cls.name + "\"? Students won't be deleted.")) { deleteClass(cls.id); setSelectedClass(null); addToast("Class deleted"); } }} style={{ color: theme.danger }}>Delete</Button>
@@ -3534,21 +3575,21 @@ export default function TutorPulse() {
               <Card style={{ padding: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: theme.accent, marginBottom: 10 }}>Schedule lessons for {members.length} students</div>
                 <div style={{ display: "flex", gap: 2, background: theme.bgInput, borderRadius: 10, padding: 3, marginBottom: 12 }}>
-                  <button onClick={() => setSchedRecurring(false)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: !schedRecurring ? theme.bgElevated : "transparent", color: !schedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Single Date</button>
-                  <button onClick={() => setSchedRecurring(true)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: schedRecurring ? theme.bgElevated : "transparent", color: schedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Recurring</button>
+                  <button onClick={() => setClassSchedRecurring(false)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: !classSchedRecurring ? theme.bgElevated : "transparent", color: !classSchedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Single Date</button>
+                  <button onClick={() => setClassSchedRecurring(true)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: classSchedRecurring ? theme.bgElevated : "transparent", color: classSchedRecurring ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Recurring</button>
                 </div>
-                {!schedRecurring ? (
-                  <Input label="Date" type="date" value={schedDate} onChange={setSchedDate} />
+                {!classSchedRecurring ? (
+                  <Input label="Date" type="date" value={classSchedDate} onChange={setClassSchedDate} />
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <Input label="From" type="date" value={schedDate} onChange={setSchedDate} />
-                    <Input label="To" type="date" value={schedEndDate} onChange={setSchedEndDate} />
+                    <Input label="From" type="date" value={classSchedDate} onChange={setClassSchedDate} />
+                    <Input label="To" type="date" value={classSchedEndDate} onChange={setClassSchedEndDate} />
                   </div>
                 )}
-                {schedRecurring && cls.day !== undefined && cls.day !== "" && (() => {
+                {classSchedRecurring && cls.day !== undefined && cls.day !== "" && (() => {
                   const dates = [];
-                  const start = new Date(schedDate + "T00:00:00");
-                  const end = schedEndDate ? new Date(schedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+                  const start = new Date(classSchedDate + "T00:00:00");
+                  const end = classSchedEndDate ? new Date(classSchedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
                   const d = new Date(start);
                   while (d <= end) { if (d.getDay() === Number(cls.day)) dates.push(new Date(d)); d.setDate(d.getDate() + 1); }
                   return dates.length > 0 && (
@@ -3565,13 +3606,13 @@ export default function TutorPulse() {
                     const dur = cls.duration || 90;
                     const subj = (cls.subject || "Lesson") + (cls.stream ? " (" + cls.stream + ")" : "");
                     let dates = [];
-                    if (schedRecurring && cls.day !== undefined && cls.day !== "") {
-                      const start = new Date(schedDate + "T00:00:00");
-                      const end = schedEndDate ? new Date(schedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+                    if (classSchedRecurring && cls.day !== undefined && cls.day !== "") {
+                      const start = new Date(classSchedDate + "T00:00:00");
+                      const end = classSchedEndDate ? new Date(classSchedEndDate + "T00:00:00") : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
                       const d = new Date(start);
                       while (d <= end) { if (d.getDay() === Number(cls.day)) dates.push(d.toISOString().split("T")[0]); d.setDate(d.getDate() + 1); }
                     } else {
-                      dates = [schedDate];
+                      dates = [classSchedDate];
                     }
                     if (dates.length === 0) { addToast("No dates to schedule", "error"); return; }
                     const total = dates.length * members.length;
@@ -3585,9 +3626,9 @@ export default function TutorPulse() {
                     });
                     setStore(prev => ({ ...prev, lessons: [...prev.lessons, ...newLessons] }));
                     addToast(total + " lessons created");
-                    setScheduleMode(false);
-                  }}>Create {schedRecurring ? "Recurring" : ""} Lessons</Button>
-                  <Button size="sm" variant="secondary" onClick={() => setScheduleMode(false)}>Cancel</Button>
+                    setClassSchedMode(false);
+                  }}>Create {classSchedRecurring ? "Recurring" : ""} Lessons</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setClassSchedMode(false)}>Cancel</Button>
                 </div>
               </Card>
             )}
@@ -3601,7 +3642,6 @@ export default function TutorPulse() {
         const cls = broadcastClassId ? (allClasses.find(c => c.id === broadcastClassId) || null) : null;
         const recipients = cls ? (cls.studentIds || []).map(sid => { const s = getStudent(sid); return s ? { studentId: sid, name: s.name, parent: s.parent || "", phone: s.parentPhone || "" } : null; }).filter(Boolean) : [];
         const selectedList = recipients.filter((_, i) => broadcastRecipients.has(i));
-        const broadcastRef = useRef(null);
         const getBroadcastText = () => (broadcastRef.current ? broadcastRef.current.value : broadcastMsg);
         return (
           <Modal open={true} onClose={() => { setShowBroadcast(false); setBroadcastClassId(null); setBroadcastMsg(""); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); }} title="Broadcast Message" width={540}>
