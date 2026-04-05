@@ -14,7 +14,7 @@ const BACKUP_PREFIX = "tutorpulse-backup-";
 const MAX_BACKUPS = 7;
 
 const createStore = () => {
-  return { students: [], lessons: [], payments: [], messages: [], notifications: [], revenueHistory: [], classes: [], settings: { tutorName: "" } };
+  return { students: [], lessons: [], payments: [], messages: [], notifications: [], revenueHistory: [], classes: [], blocks: [], paymentLog: [], settings: { tutorName: "", phWarnings: true } };
 };
 
 // ── Persistence helpers ─────────────────────────────────────
@@ -211,6 +211,53 @@ const css = `
 `;
 
 // ── Utility Functions ───────────────────────────────────────
+const REFERRAL_OPTIONS = [
+  { value: "", label: "— Not specified —" },
+  { value: "word_of_mouth", label: "Word of mouth (parent referral)" },
+  { value: "former_student", label: "Former student" },
+  { value: "tutor_agency", label: "Tutor agency" },
+  { value: "social_media", label: "Social media" },
+  { value: "school_recommendation", label: "School recommendation" },
+  { value: "existing_sibling", label: "Existing sibling" },
+  { value: "other", label: "Other" },
+];
+const SG_HOLIDAYS = [
+  { date: "2026-01-01", name: "New Year's Day" },
+  { date: "2026-02-17", name: "Chinese New Year" },
+  { date: "2026-02-18", name: "Chinese New Year" },
+  { date: "2026-03-20", name: "Hari Raya Puasa" },
+  { date: "2026-04-03", name: "Good Friday" },
+  { date: "2026-05-01", name: "Labour Day" },
+  { date: "2026-05-02", name: "Vesak Day" },
+  { date: "2026-05-14", name: "Hari Raya Haji" },
+  { date: "2026-08-10", name: "National Day (observed)" },
+  { date: "2026-11-09", name: "Deepavali" },
+  { date: "2026-12-25", name: "Christmas Day" },
+  { date: "2027-01-01", name: "New Year's Day" },
+  { date: "2027-02-06", name: "Chinese New Year" },
+  { date: "2027-02-07", name: "Chinese New Year" },
+  { date: "2027-03-10", name: "Hari Raya Puasa" },
+  { date: "2027-03-26", name: "Good Friday" },
+  { date: "2027-05-01", name: "Labour Day" },
+  { date: "2027-05-04", name: "Hari Raya Haji" },
+  { date: "2027-05-20", name: "Vesak Day" },
+  { date: "2027-08-09", name: "National Day" },
+  { date: "2027-10-29", name: "Deepavali" },
+  { date: "2027-12-25", name: "Christmas Day" },
+  { date: "2028-01-01", name: "New Year's Day" },
+  { date: "2028-01-26", name: "Chinese New Year" },
+  { date: "2028-01-27", name: "Chinese New Year" },
+  { date: "2028-02-28", name: "Hari Raya Puasa" },
+  { date: "2028-04-14", name: "Good Friday" },
+  { date: "2028-04-24", name: "Hari Raya Haji" },
+  { date: "2028-05-01", name: "Labour Day" },
+  { date: "2028-05-10", name: "Vesak Day" },
+  { date: "2028-08-09", name: "National Day" },
+  { date: "2028-11-15", name: "Deepavali" },
+  { date: "2028-12-25", name: "Christmas Day" },
+];
+const getHoliday = (dateStr) => SG_HOLIDAYS.find(h => h.date === dateStr);
+
 const LEVEL_OPTIONS = [
   { value: "P1", label: "Primary 1" }, { value: "P2", label: "Primary 2" }, { value: "P3", label: "Primary 3" },
   { value: "P4", label: "Primary 4" }, { value: "P5", label: "Primary 5" }, { value: "P6", label: "Primary 6" },
@@ -458,6 +505,7 @@ export default function TutorPulse() {
   const [messageTarget, setMessageTarget] = useState("parent");
   const [includeSiblings, setIncludeSiblings] = useState(false); // "parent" or "student"
   const [showAI, setShowAI] = useState(false);
+  const [aiSugIdx, setAiSugIdx] = useState(0);
   // Class state
   const [studentsTab, setStudentsTab] = useState("students"); // "students" or "classes"
   const [selectedClass, setSelectedClass] = useState(null);
@@ -470,6 +518,8 @@ export default function TutorPulse() {
   const [broadcastRecipients, setBroadcastRecipients] = useState(new Set());
   const [broadcastSentIdx, setBroadcastSentIdx] = useState(-1);
   const broadcastRef = useRef(null);
+  const [showBlockTime, setShowBlockTime] = useState(false);
+  const [blockForm, setBlockForm] = useState({ date: "", time: "09:00", duration: "60", label: "", allDay: false, recurrence: "none", endDate: "" });
   const [classSchedMode, setClassSchedMode] = useState(false);
   const [classSchedDate, setClassSchedDate] = useState(new Date().toISOString().split("T")[0]);
   const [classSchedEndDate, setClassSchedEndDate] = useState("");
@@ -575,6 +625,9 @@ export default function TutorPulse() {
   const updateClass = useCallback((id, updates) => { setStore((s) => ({ ...s, classes: (s.classes || []).map(c => c.id === id ? { ...c, ...updates } : c) })); }, []);
   const deleteClass = useCallback((id) => { setStore((s) => ({ ...s, classes: (s.classes || []).filter(c => c.id !== id) })); }, []);
   const getClass = useCallback((id) => (store.classes || []).find(c => c.id === id), [store.classes]);
+  const addBlock = useCallback((block) => { setStore((s) => ({ ...s, blocks: [...(s.blocks || []), { id: "b" + genId(), ...block }] })); }, []);
+  const deleteBlock = useCallback((id) => { setStore((s) => ({ ...s, blocks: (s.blocks || []).filter(b => b.id !== id) })); }, []);
+
   const getStudentClasses = useCallback((studentId) => (store.classes || []).filter(c => (c.studentIds || []).includes(studentId)), [store.classes]);
 
   // ── Hourly rate → Monthly fee calculator ─────────────────────
@@ -780,6 +833,60 @@ export default function TutorPulse() {
         )}
       </div>
 
+      {/* Backup Reminder */}
+      {(() => {
+        const lastExport = localStorage.getItem("tutorpulse-last-export");
+        const snoozed = localStorage.getItem("tutorpulse-backup-snoozed");
+        const daysSince = lastExport ? Math.floor((Date.now() - new Date(lastExport).getTime()) / 86400000) : null;
+        const snoozeDays = snoozed ? Math.floor((Date.now() - new Date(snoozed).getTime()) / 86400000) : 999;
+        const shouldShow = store.students.length > 0 && (daysSince === null || daysSince >= 7) && snoozeDays >= 3;
+        return shouldShow ? (
+          <Card style={{ marginBottom: 16, padding: 14, borderColor: theme.accent + "44", background: theme.accentBg }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Icon name="download" size={18} color={theme.accent} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: theme.accent }}>{daysSince === null ? "You haven't backed up your data yet" : "Back up your data — " + daysSince + " days since last export"}</div>
+              </div>
+              <button onClick={() => { setPage("admin"); }} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + theme.accent, background: "transparent", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Back up</button>
+              <button onClick={() => { localStorage.setItem("tutorpulse-backup-snoozed", new Date().toISOString()); addToast("Reminder snoozed for 3 days"); }} style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 10, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Later</button>
+            </div>
+          </Card>
+        ) : null;
+      })()}
+
+      {/* Getting Started Checklist */}
+      {(() => {
+        if (localStorage.getItem("tutorpulse-checklist-dismissed")) return null;
+        const items = [
+          { label: "Set your name", done: !!(store.settings || {}).tutorName, action: () => setPage("admin") },
+          { label: "Add your first student", done: store.students.length > 0, action: () => setShowNewStudent(true) },
+          { label: "Schedule your first lesson", done: store.lessons.length > 0, action: () => setShowNewLesson(true) },
+          { label: "Record your first payment", done: store.payments.length > 0, action: () => setPage("payments") },
+          { label: "Try the AI Assistant", done: aiHistory.length > 0, action: () => setShowAI(true) },
+        ];
+        const completed = items.filter(i => i.done).length;
+        if (completed === items.length) { if (!localStorage.getItem("tutorpulse-checklist-done")) localStorage.setItem("tutorpulse-checklist-done", "true"); return null; }
+        return (
+          <Card style={{ marginBottom: 16, padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Getting Started</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 11, color: theme.textMuted }}>{completed}/{items.length}</span>
+                <button onClick={() => { localStorage.setItem("tutorpulse-checklist-dismissed", "true"); addToast("Checklist hidden"); }} style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 14, cursor: "pointer" }}>x</button>
+              </div>
+            </div>
+            <div style={{ height: 4, background: theme.bgInput, borderRadius: 2, marginBottom: 10, overflow: "hidden" }}><div style={{ height: "100%", width: (completed / items.length * 100) + "%", background: theme.accent, borderRadius: 2, transition: "width 0.3s" }} /></div>
+            {items.map((item, i) => (
+              <div key={i} onClick={item.done ? undefined : item.action} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", cursor: item.done ? "default" : "pointer", borderTop: i > 0 ? "1px solid " + theme.border : "none" }}>
+                <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (item.done ? theme.accent : theme.borderLight), background: item.done ? theme.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{item.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A0E17" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}</div>
+                <span style={{ flex: 1, fontSize: 13, color: item.done ? theme.textMuted : theme.textSecondary, textDecoration: item.done ? "line-through" : "none" }}>{item.label}</span>
+                {!item.done && <Icon name="chevRight" size={14} color={theme.textMuted} />}
+              </div>
+            ))}
+          </Card>
+        );
+      })()}
+
       {/* Quick Actions */}
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif", marginBottom: 12 }}>Quick Actions</h2>
@@ -887,7 +994,7 @@ export default function TutorPulse() {
       <div className="fade-in">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h1 style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Schedule</h1>
-          <Button size="sm" icon="plus" onClick={() => setShowNewLesson(true)}>New Lesson</Button>
+<div style={{ display: "flex", gap: 6 }}><Button size="sm" variant="secondary" onClick={() => { setBlockForm({ date: new Date().toISOString().split("T")[0], time: "09:00", duration: "60", label: "", allDay: false, recurrence: "none", endDate: "" }); setShowBlockTime(true); }}>Block Time</Button><Button size="sm" icon="plus" onClick={() => setShowNewLesson(true)}>New Lesson</Button></div>
         </div>
 
         <TabBar tabs={[{ id: "today", label: "Today" }, { id: "month", label: "This Month" }, { id: "calendar", label: "Calendar" }]} active={viewMode} onChange={(v) => { setViewMode(v); setSelectedDay(null); }} />
@@ -1195,7 +1302,8 @@ export default function TutorPulse() {
         if (payment.lessonId) record.lessonId = payment.lessonId;
         setStore((s) => ({ ...s, payments: [...s.payments, record] }));
       }
-      addToast("Payment marked as paid");
+      addToast("Payment recorded — " + ((getStudent(payment.studentId) || {}).name || "Student") + ", " + payment.month + ", $" + (payment.amount || 0).toFixed(2));
+      setStore(s => ({ ...s, paymentLog: [...(s.paymentLog || []), { id: "pl" + genId(), studentId: payment.studentId, month: payment.month, amount: payment.amount || 0, method: "PayNow", recordedAt: new Date().toISOString() }] }));
     };
 
     const markUnpaid = (payment) => {
@@ -1263,7 +1371,7 @@ export default function TutorPulse() {
             </div>
             <div style={{ width: 1, background: theme.border }} />
             <div>
-              <div style={{ fontSize: 11, color: theme.warning, fontWeight: 600, marginBottom: 2 }}>PENDING</div>
+              <div style={{ fontSize: 11, color: theme.warning, fontWeight: 600, marginBottom: 2 }}>OUTSTANDING</div>
               <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Playfair Display', serif", color: theme.warning }}>${totalPending.toLocaleString()}</div>
             </div>
           </div>
@@ -1323,6 +1431,25 @@ export default function TutorPulse() {
             );
           })}
           {filtered.length === 0 && <EmptyState icon="dollar" title="No fees for this month" sub="Schedule lessons to see fee entries here" />}
+          {(store.paymentLog || []).length > 0 && (
+          <Card style={{ marginTop: 16, padding: 14 }}>
+            <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>PAYMENT LOG ({(store.paymentLog || []).filter(pl => pl.month === monthView).length})</div>
+            <div style={{ maxHeight: 150, overflow: "auto", fontSize: 11 }}>
+              {(store.paymentLog || []).filter(pl => pl.month === monthView).sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)).map(pl => {
+                const s = getStudent(pl.studentId);
+                return (
+                  <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", borderBottom: "1px solid " + theme.border }}>
+                    <Icon name="check" size={10} color={theme.success} />
+                    <span style={{ flex: 1, color: theme.textSecondary }}>{s ? s.name : "Unknown"}</span>
+                    <span style={{ color: theme.success, fontWeight: 600 }}>{"$"}{pl.amount.toFixed(2)}</span>
+                    <span style={{ color: theme.textMuted, fontSize: 10 }}>{new Date(pl.recordedAt).toLocaleDateString("en-SG", { day: "numeric", month: "short" })}</span>
+                  </div>
+                );
+              })}
+              {(store.paymentLog || []).filter(pl => pl.month === monthView).length === 0 && <div style={{ color: theme.textMuted, padding: 4 }}>No payments recorded this month</div>}
+            </div>
+          </Card>
+        )}
         </div>
       </div>
     );
@@ -1560,6 +1687,20 @@ export default function TutorPulse() {
                 ));
               })()}
             </Card>
+            <Card style={{ marginTop: 12 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>How Students Find You</h3>
+              {(() => {
+                const sources = {};
+                store.students.forEach(s => { if (s.referralSource) sources[s.referralSource] = (sources[s.referralSource] || 0) + 1; });
+                const sorted = Object.entries(sources).sort((a, b) => b[1] - a[1]);
+                if (sorted.length < 1) return <div style={{ fontSize: 12, color: theme.textMuted }}>Add referral sources to your students to see this breakdown.</div>;
+                const max = sorted[0][1];
+                return sorted.map(([src, count]) => {
+                  const label = (REFERRAL_OPTIONS.find(r => r.value === src) || {}).label || src;
+                  return (<div key={src} style={{ marginBottom: 8 }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: theme.textSecondary, marginBottom: 2 }}><span>{label}</span><span style={{ fontWeight: 700 }}>{count}</span></div><div style={{ height: 6, background: theme.bgInput, borderRadius: 3, overflow: "hidden" }}><div style={{ height: "100%", width: (count / max * 100) + "%", background: theme.accent, borderRadius: 3 }} /></div></div>);
+                });
+              })()}
+            </Card>
           </>
         )}
 
@@ -1748,6 +1889,46 @@ export default function TutorPulse() {
                   }}>{year} Report</Button>
                 ))}
               </div>
+            </Card>
+
+            {/* My Data Export */}
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>MY DATA</div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Your data belongs to you. Export it anytime.</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = "TutorPulse-Export-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
+                  localStorage.setItem("tutorpulse-last-export", new Date().toISOString());
+                  addToast("JSON export downloaded");
+                }}>JSON</Button>
+                <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  try {
+                    const wb = XLSX.utils.book_new();
+                    const sData = store.students.map(s => ({ Name: s.name, Level: s.level, Subject: (s.subjects || []).map(e => e.subject).join(", "), Stream: (s.subjects || []).map(e => e.stream).join(", "), "Hourly Rate": s.hourlyRate, Status: s.status, Parent: s.parent, Phone: s.parentPhone, School: (s.schools || []).length > 0 ? s.schools[s.schools.length-1].name : "", "Join Date": s.joinDate }));
+                    const lData = store.lessons.map(l => { const s = getStudent(l.studentId); return { Date: new Date(l.date).toLocaleDateString("en-SG"), Time: new Date(l.date).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }), Student: s ? s.name : "Unknown", Subject: l.subject, Duration: l.duration, Location: l.location, Status: l.status }; });
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sData), "Students");
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lData), "Lessons");
+                    XLSX.writeFile(wb, "TutorPulse-Export-" + new Date().toISOString().split("T")[0] + ".xlsx");
+                    localStorage.setItem("tutorpulse-last-export", new Date().toISOString());
+                    addToast("Spreadsheet export downloaded");
+                  } catch (err) { addToast("Export failed: " + err.message, "error"); }
+                }}>Spreadsheet</Button>
+                <Button size="sm" variant="secondary" icon="download" onClick={() => {
+                  const cm = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+                  const active = store.students.filter(s => s.status === "active" || s.status === "trial");
+                  let html = "<html><head><title>TutorPulse Summary</title><style>body{font-family:sans-serif;max-width:700px;margin:auto;padding:20px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ddd;padding:6px;text-align:left;font-size:12px}th{background:#f5f5f5}</style></head><body>";
+                  html += "<h2>TutorPulse Summary</h2><p>Exported: " + new Date().toLocaleDateString("en-SG") + "</p>";
+                  html += "<p>Active students: " + active.length + " | Lessons this month: " + store.lessons.filter(l => { const d = new Date(l.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length + "</p>";
+                  html += "<table><tr><th>Student</th><th>Level</th><th>Subject</th><th>Rate</th><th>Status</th></tr>";
+                  active.forEach(s => { html += "<tr><td>" + s.name + "</td><td>" + s.level + "</td><td>" + (s.subject || "") + "</td><td>$" + s.hourlyRate + "</td><td>" + s.status + "</td></tr>"; });
+                  html += "</table></body></html>";
+                  const w = window.open("", "_blank"); w.document.write(html); w.document.close(); w.print();
+                  localStorage.setItem("tutorpulse-last-export", new Date().toISOString());
+                }}>PDF Summary</Button>
+              </div>
+              <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 6 }}>This export is for your records only. It does not delete or change any data.</div>
             </Card>
 
             <Card style={{ padding: 14 }}>
@@ -2155,15 +2336,9 @@ export default function TutorPulse() {
   const [bulkSelected, setBulkSelected] = useState(new Set());
   const [bulkPreviewIdx, setBulkPreviewIdx] = useState(null);
   const msgTextRef = useRef(null);
-
-  // Sync textarea DOM when msgText changes from templates
-  useEffect(() => {
-    if (msgTextRef.current && msgTextRef.current.value !== msgText) {
-      msgTextRef.current.value = msgText;
-    }
-  }, [msgText]);
-
-  // Get current text from textarea ref (live) or state (fallback)
+  const msgTextVersion = useRef(0);
+  const setMsgTextAndSync = (text) => { msgTextVersion.current += 1; setMsgText(text); };
+  useEffect(() => { if (msgTextRef.current && msgTextVersion.current > 0) { msgTextRef.current.value = msgText; } }, [msgText]);
   const getMsgText = () => { const refVal = msgTextRef.current ? msgTextRef.current.value : ""; return refVal || msgText; };
 
   const MessageComposeModal = () => {
@@ -2828,6 +3003,17 @@ export default function TutorPulse() {
           </div>
         )}
 
+        {!aiResult && !aiLoading && (() => {
+          const suggestions = ["How much did I earn last month?", "Which students have not paid yet?", "How many hours did I teach this week?", "Who are my highest earning students?", "Summarise my schedule for this week", "Which student has the most lessons this month?", "What is my projected income this month?", "Are there any scheduling clashes coming up?"];
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, justifyContent: "center" }}>
+              <button onClick={() => setAiSugIdx((aiSugIdx - 1 + suggestions.length) % suggestions.length)} style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer", padding: "4px" }}>&lt;</button>
+              <div onClick={() => { setPrompt(suggestions[aiSugIdx]); }} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid " + theme.accent + "44", background: theme.accentBg, color: theme.accent, fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{suggestions[aiSugIdx]}</div>
+              <button onClick={() => setAiSugIdx((aiSugIdx + 1) % suggestions.length)} style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer", padding: "4px" }}>&gt;</button>
+            </div>
+          );
+        })()}
+
         <div style={{ display: "flex", gap: 8 }}>
           <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={aiResult ? "Follow up or ask for more detail..." : "Ask TutorPulse AI anything..."} style={{ flex: 1, padding: "10px 14px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 13 }} onKeyDown={(e) => { if (e.key === "Enter" && prompt.trim()) { if (aiResult) { callAI(prompt, true); } else { callAI(prompt); } setPrompt(""); } }} />
           <Button size="sm" icon="send" onClick={() => { if (prompt.trim()) { if (aiResult) { callAI(prompt, true); } else { callAI(prompt); } setPrompt(""); } }} disabled={aiLoading || !prompt.trim()}>{aiResult ? "Reply" : "Ask"}</Button>
@@ -3185,6 +3371,7 @@ export default function TutorPulse() {
             {!isRecurring ? (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <Input label="Date" type="date" value={lessonForm.date} onChange={(v) => updateLessonForm("date", v)} />
+                {lessonForm.date && (store.settings || {}).phWarnings !== false && getHoliday(lessonForm.date) && (<div style={{ fontSize: 11, color: theme.warning, padding: "4px 8px", background: "rgba(245,158,11,0.1)", borderRadius: 6, marginTop: -8, marginBottom: 8 }}>This date is {getHoliday(lessonForm.date).name}. Lessons can still be scheduled.</div>)}
                 <Input label="Time" type="time" value={lessonForm.time} onChange={(v) => updateLessonForm("time", v)} />
               </div>
             ) : (
@@ -3253,6 +3440,15 @@ export default function TutorPulse() {
                       clashes.push((isSameStudent ? "⚠️ Same student: " : "🕐 Tutor busy: ") + (n ? n.name : "?") + " at " + lDate.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }));
                     }
                   });
+                  // Check blocks
+                  (store.blocks || []).forEach(b => {
+                    const bDate = new Date(b.date);
+                    const bDateStr = bDate.getFullYear() + "-" + String(bDate.getMonth() + 1).padStart(2, "0") + "-" + String(bDate.getDate()).padStart(2, "0");
+                    if (bDateStr !== newDateStr) return;
+                    if (b.allDay) { clashes.push("Blocked: " + (b.label || "Busy") + " (all day)"); return; }
+                    const bStart = bDate.getTime(); const bEnd = bStart + (parseInt(b.duration) || 60) * 60000;
+                    if (newStart < bEnd && newEnd > bStart) clashes.push("Blocked: " + (b.label || "Busy") + " at " + bDate.toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" }));
+                  });
                   return clashes;
                 };
                 if (isRecurring) {
@@ -3318,6 +3514,11 @@ export default function TutorPulse() {
           <Input label="Student Email (optional)" value={newStudentForm.studentEmail || ""} onChange={(v) => updateNewStudentForm("studentEmail", v)} placeholder="student@example.com" />
           <Input label="Address" value={newStudentForm.address} onChange={(v) => updateNewStudentForm("address", v)} placeholder="Student's home address" />
           <Input label="Hourly Rate ($)" type="number" value={newStudentForm.hourlyRate} onChange={(v) => updateNewStudentForm("hourlyRate", v)} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Select label="Status" value={newStudentForm.status || "trial"} onChange={(v) => updateNewStudentForm("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }]} />
+            <Input label="School" value={newStudentForm.school || ""} onChange={(v) => updateNewStudentForm("school", v)} placeholder="e.g. Anderson Secondary" />
+          </div>
+          <Select label="How did this student find you?" value={newStudentForm.referralSource || ""} onChange={(v) => updateNewStudentForm("referralSource", v)} options={REFERRAL_OPTIONS} />
           <Input label="Notes" value={newStudentForm.notes} onChange={(v) => updateNewStudentForm("notes", v)} multiline placeholder="Any notes about the student..." />
           <div style={{ display: "flex", gap: 8 }}>
             <Button onClick={() => {
@@ -3330,7 +3531,7 @@ export default function TutorPulse() {
               }));
               const firstGrade = subjects[0]?.grade || "";
               // For backward compat, also set subject/stream to first entry
-              addStudent({ name: newStudentForm.name, level: newStudentForm.level === "Other" ? (newStudentForm.levelOther || "Other") : newStudentForm.level, subjects: subjects, subject: subjects[0].subject, stream: subjects[0].stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, studentPhone: newStudentForm.studentPhone || "", studentEmail: newStudentForm.studentEmail || "", hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, gradeCurrent: firstGrade, gradeStart: firstGrade, gradeHistory: [], status: "trial", joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
+              addStudent({ name: newStudentForm.name, level: newStudentForm.level === "Other" ? (newStudentForm.levelOther || "Other") : newStudentForm.level, subjects: subjects, subject: subjects[0].subject, stream: subjects[0].stream, parent: newStudentForm.parent, parentPhone: newStudentForm.parentPhone, parentEmail: newStudentForm.parentEmail, studentPhone: newStudentForm.studentPhone || "", studentEmail: newStudentForm.studentEmail || "", hourlyRate: parseFloat(newStudentForm.hourlyRate) || 70, address: newStudentForm.address, gradeCurrent: firstGrade, gradeStart: firstGrade, gradeHistory: [], status: newStudentForm.status || "trial", referralSource: newStudentForm.referralSource || "", schools: newStudentForm.school ? [{ name: newStudentForm.school, from: new Date().getFullYear().toString() }] : [], joinDate: new Date().toISOString().split("T")[0], notes: newStudentForm.notes, avatar: initials });
               setNewStudentForm({ name: "", level: "P5", levelOther: "", subjects: [{ subject: "Chinese", subjectOther: "", stream: "Standard", streamOther: "" }], parent: "", parentPhone: "", parentEmail: "", hourlyRate: "70", address: "", gradeCurrent: "", notes: "" });
               setShowNewStudent(false);
             }}>Add Student</Button>
@@ -3342,7 +3543,7 @@ export default function TutorPulse() {
       {selectedStudent && (() => {
         const studentLessons = store.lessons.filter((l) => l.studentId === selectedStudent.id).sort((a, b) => new Date(a.date) - new Date(b.date));
         const startEdit = () => {
-          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, levelOther: selectedStudent.levelOther || "", subjects: selectedStudent.subjects || [{ subject: selectedStudent.subject || "Chinese", subjectOther: "", stream: selectedStudent.stream || "Standard", streamOther: "" }], subject: selectedStudent.subject, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, studentPhone: selectedStudent.studentPhone || "", studentEmail: selectedStudent.studentEmail || "", hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status, paymentMode: selectedStudent.paymentMode || "monthly", gradeStart: selectedStudent.gradeStart || "", gradeCurrent: selectedStudent.gradeCurrent || "", gradeHistory: selectedStudent.gradeHistory || [] });
+          setStudentEditForm({ name: selectedStudent.name, level: selectedStudent.level, levelOther: selectedStudent.levelOther || "", subjects: selectedStudent.subjects || [{ subject: selectedStudent.subject || "Chinese", subjectOther: "", stream: selectedStudent.stream || "Standard", streamOther: "" }], subject: selectedStudent.subject, stream: selectedStudent.stream, parent: selectedStudent.parent, parentPhone: selectedStudent.parentPhone, parentEmail: selectedStudent.parentEmail, studentPhone: selectedStudent.studentPhone || "", studentEmail: selectedStudent.studentEmail || "", hourlyRate: String(selectedStudent.hourlyRate), address: selectedStudent.address || "", notes: selectedStudent.notes || "", status: selectedStudent.status, paymentMode: selectedStudent.paymentMode || "monthly", gradeStart: selectedStudent.gradeStart || "", gradeCurrent: selectedStudent.gradeCurrent || "", gradeHistory: selectedStudent.gradeHistory || [], schools: selectedStudent.schools || [], referralSource: selectedStudent.referralSource || "" });
           setEditingStudent(true);
         };
         const saveEdit = () => {
@@ -3354,7 +3555,7 @@ export default function TutorPulse() {
             gradeCurrent: e.gradeCurrent || e.grade || "",
             assessments: (e.assessments || []).filter(a => a.label || a.grade),
           }));
-          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, studentPhone: studentEditForm.studentPhone || "", studentEmail: studentEditForm.studentEmail || "", hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeCurrent: resolvedSubs[0]?.gradeCurrent || "", gradeStart: resolvedSubs[0]?.gradeStart || "", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
+          const u = { name: studentEditForm.name, level: studentEditForm.level === "Other" ? (studentEditForm.levelOther || "Other") : studentEditForm.level, subjects: resolvedSubs, subject: resolvedSubs[0]?.subject || "", stream: resolvedSubs[0]?.stream || "", parent: studentEditForm.parent, parentPhone: studentEditForm.parentPhone, parentEmail: studentEditForm.parentEmail, studentPhone: studentEditForm.studentPhone || "", studentEmail: studentEditForm.studentEmail || "", hourlyRate: parseFloat(studentEditForm.hourlyRate) || selectedStudent.hourlyRate, address: studentEditForm.address, notes: studentEditForm.notes, status: studentEditForm.status, paymentMode: studentEditForm.paymentMode || "monthly", gradeCurrent: resolvedSubs[0]?.gradeCurrent || "", gradeStart: resolvedSubs[0]?.gradeStart || "", schools: studentEditForm.schools || [], referralSource: studentEditForm.referralSource || "", avatar: studentEditForm.name.split(" ").map(w => w[0]).join("").toUpperCase().substring(0, 2) };
           updateStudent(selectedStudent.id, u); setSelectedStudent({ ...selectedStudent, ...u }); setEditingStudent(false); addToast("Student updated");
         };
         const uf = (k, v) => setStudentEditForm((f) => ({ ...f, [k]: v }));
@@ -3374,6 +3575,7 @@ export default function TutorPulse() {
                   <div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.parentEmail}</div>
                   {selectedStudent.studentPhone && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>Student: {formatPhoneDisplay(selectedStudent.studentPhone)}</div>}
                   {selectedStudent.address && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>{selectedStudent.address}</div>}
+                  {(selectedStudent.schools || []).length > 0 && <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 4 }}>{selectedStudent.schools[selectedStudent.schools.length - 1].name}</div>}
                 </Card>
                 {selectedStudent.notes && (<Card style={{ marginBottom: 12, padding: 14, borderLeft: "3px solid " + theme.accent }}><div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>NOTES</div><div style={{ fontSize: 13, color: theme.textSecondary }}>{selectedStudent.notes}</div></Card>)}
                 {/* Class membership */}
@@ -3464,6 +3666,20 @@ export default function TutorPulse() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }, { value: "graduated", label: "Graduated" }]} /></div>
                 <Select label="Payment Mode" value={studentEditForm.paymentMode || "monthly"} onChange={(v) => uf("paymentMode", v)} options={[{ value: "monthly", label: "Monthly" }, { value: "per_lesson", label: "Per Lesson" }]} />
                 <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
+                <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 6, letterSpacing: 0.5 }}>SCHOOL HISTORY</div>
+                {(studentEditForm.schools || []).map((sch, si) => (
+                  <div key={si} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, padding: "4px 8px", background: theme.bgInput, borderRadius: 8 }}>
+                    <span style={{ flex: 1, fontSize: 12, color: si === (studentEditForm.schools || []).length - 1 ? theme.text : theme.textMuted }}>{sch.name} (from {sch.from})</span>
+                    {si === (studentEditForm.schools || []).length - 1 && <Badge text="current" color={theme.success} bg={theme.successBg} />}
+                    <button onClick={() => { const s = [...(studentEditForm.schools || [])]; s.splice(si, 1); uf("schools", s); }} style={{ background: "none", border: "none", color: theme.danger, fontSize: 11, cursor: "pointer" }}>remove</button>
+                  </div>
+                ))}
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr auto", gap: 8, marginBottom: 12 }}>
+                  <Input label="" value={studentEditForm._newSchool || ""} onChange={(v) => uf("_newSchool", v)} placeholder="School name" />
+                  <Input label="" value={studentEditForm._newSchoolYear || new Date().getFullYear().toString()} onChange={(v) => uf("_newSchoolYear", v)} placeholder="Year" />
+                  <button onClick={() => { if (!studentEditForm._newSchool) return; uf("schools", [...(studentEditForm.schools || []), { name: studentEditForm._newSchool, from: studentEditForm._newSchoolYear || new Date().getFullYear().toString() }]); uf("_newSchool", ""); }} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid " + theme.border, background: theme.bgElevated, color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>Add</button>
+                </div>
+                <Select label="How did this student find you?" value={studentEditForm.referralSource || ""} onChange={(v) => uf("referralSource", v)} options={REFERRAL_OPTIONS} />
                 <Input label="Notes" value={studentEditForm.notes} onChange={(v) => uf("notes", v)} multiline />
                 {/* Grade Tracking */}
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}><Button size="sm" icon="check" onClick={saveEdit}>Save Changes</Button><Button size="sm" variant="secondary" onClick={() => setEditingStudent(false)}>Cancel</Button></div>
@@ -3742,6 +3958,30 @@ export default function TutorPulse() {
         );
       })()}
 
+
+      {showBlockTime && (
+        <Modal open={true} onClose={() => setShowBlockTime(false)} title="Block Time" width={440}>
+          <Input label="Date" type="date" value={blockForm.date} onChange={(v) => setBlockForm(f => ({ ...f, date: v }))} />
+          {blockForm.date && (store.settings || {}).phWarnings !== false && getHoliday(blockForm.date) && (<div style={{ fontSize: 11, color: theme.warning, padding: "4px 8px", background: "rgba(245,158,11,0.1)", borderRadius: 6, marginTop: -8, marginBottom: 8 }}>Public holiday ({getHoliday(blockForm.date).name})</div>)}
+          <div style={{ display: "flex", gap: 2, background: theme.bgInput, borderRadius: 10, padding: 3, marginBottom: 12 }}>
+            <button onClick={() => setBlockForm(f => ({ ...f, allDay: false }))} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: !blockForm.allDay ? theme.bgElevated : "transparent", color: !blockForm.allDay ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Specific Time</button>
+            <button onClick={() => setBlockForm(f => ({ ...f, allDay: true }))} style={{ flex: 1, padding: "6px", borderRadius: 8, border: "none", background: blockForm.allDay ? theme.bgElevated : "transparent", color: blockForm.allDay ? theme.text : theme.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>All Day</button>
+          </div>
+          {!blockForm.allDay && (<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Time" type="time" value={blockForm.time} onChange={(v) => setBlockForm(f => ({ ...f, time: v }))} /><Select label="Duration" value={blockForm.duration} onChange={(v) => setBlockForm(f => ({ ...f, duration: v }))} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }, { value: "90", label: "90 min" }, { value: "120", label: "120 min" }, { value: "180", label: "3 hours" }, { value: "240", label: "4 hours" }]} /></div>)}
+          <Input label="Label (optional)" value={blockForm.label} onChange={(v) => setBlockForm(f => ({ ...f, label: v }))} placeholder="e.g. Dentist, Family dinner" />
+          <Select label="Recurrence" value={blockForm.recurrence} onChange={(v) => setBlockForm(f => ({ ...f, recurrence: v }))} options={[{ value: "none", label: "Just this date" }, { value: "weekly", label: "Weekly" }, { value: "daily", label: "Daily" }]} />
+          {blockForm.recurrence !== "none" && <Input label="Until" type="date" value={blockForm.endDate} onChange={(v) => setBlockForm(f => ({ ...f, endDate: v }))} />}
+          <Button onClick={() => {
+            if (!blockForm.date) { addToast("Select a date", "error"); return; }
+            if (blockForm.recurrence !== "none" && !blockForm.endDate) { addToast("Set an end date", "error"); return; }
+            const dates = [];
+            if (blockForm.recurrence === "none") { dates.push(blockForm.date); }
+            else { const s = new Date(blockForm.date + "T00:00:00"); const e = new Date(blockForm.endDate + "T00:00:00"); const td = s.getDay(); const d = new Date(s); while (d <= e) { if (blockForm.recurrence === "daily" || d.getDay() === td) dates.push(d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0")); d.setDate(d.getDate()+1); } }
+            dates.forEach(ds => { const dt = blockForm.allDay ? new Date(ds + "T00:00:00") : new Date(ds + "T" + blockForm.time + ":00"); addBlock({ date: dt.toISOString(), duration: blockForm.allDay ? 1440 : parseInt(blockForm.duration) || 60, label: blockForm.label || "Busy", allDay: blockForm.allDay }); });
+            addToast(dates.length + " block(s) created"); setShowBlockTime(false);
+          }}>Block Time</Button>
+        </Modal>
+      )}
       <AIAssistantModal />
       <NotificationsPanel />
     </div>
