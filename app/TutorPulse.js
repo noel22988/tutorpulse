@@ -1068,14 +1068,15 @@ export default function TutorPulse() {
         </div>
 
         {/* Collapsible Calendar */}
-        <Card style={{ marginBottom: 12, padding: schedCalOpen ? 14 : 10 }}>
+        <Card style={{ marginBottom: 0, padding: schedCalOpen ? 14 : 10, borderBottomLeftRadius: schedCalOpen ? 16 : 16, borderBottomRightRadius: schedCalOpen ? 16 : 16 }}>
           <div style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ width: 28 }} />
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <button onClick={() => setCalendarDate(new Date(year, month - 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&lt;</button>
               <div style={{ fontSize: 14, fontWeight: 700, color: theme.text, cursor: "pointer" }} onClick={() => setSchedCalOpen(!schedCalOpen)}>{new Date(year, month).toLocaleDateString("en-SG", { month: "long", year: "numeric" })}</div>
               <button onClick={() => setCalendarDate(new Date(year, month + 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&gt;</button>
             </div>
-            <button onClick={() => setSchedCalOpen(!schedCalOpen)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}><Icon name={schedCalOpen ? "chevUp" : "chevDown"} size={16} color={theme.textMuted} /></button>
+            <button onClick={() => setSchedCalOpen(!schedCalOpen)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", flexShrink: 0, width: 28, textAlign: "center" }}><Icon name={schedCalOpen ? "chevUp" : "chevDown"} size={16} color={theme.textMuted} /></button>
           </div>
           {schedCalOpen && (
             <div style={{ marginTop: 10 }}>
@@ -1417,11 +1418,13 @@ export default function TutorPulse() {
           const viewParts = monthView.split("-").map(Number);
           return (
             <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={() => { const d = new Date(viewParts[0], viewParts[1] - 2, 1); setMonthView(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid " + theme.border, background: "transparent", color: theme.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&lt;</button>
               {quickMonths.map((m) => (
                 <button key={m} onClick={() => setMonthView(m)} style={{ padding: "8px 16px", borderRadius: 10, border: "1px solid " + (monthView === m ? theme.accent : theme.border), background: monthView === m ? theme.accentBg : "transparent", color: monthView === m ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
                   {formatMonth(m)}
                 </button>
               ))}
+              <button onClick={() => { const d = new Date(viewParts[0], viewParts[1], 1); setMonthView(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid " + theme.border, background: "transparent", color: theme.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&gt;</button>
               <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                 <select value={isQuick ? "" : String(viewParts[1])} onChange={(e) => { if (e.target.value) { const m = (viewParts[0] || now.getFullYear()) + "-" + e.target.value.padStart(2, "0"); setMonthView(m); } }} style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid " + (!isQuick ? theme.accent : theme.border), background: !isQuick ? theme.accentBg : theme.bgInput, color: !isQuick ? theme.accent : theme.textSecondary, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", appearance: "none" }}>
                   <option value="">Mth</option>
@@ -4087,3 +4090,4 @@ export default function TutorPulse() {
     </div>
   );
 }
+
