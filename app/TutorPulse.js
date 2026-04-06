@@ -1421,7 +1421,7 @@ export default function TutorPulse() {
               <button onClick={() => { const d = new Date(viewParts[0], viewParts[1] - 2, 1); setMonthView(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid " + theme.border, background: "transparent", color: theme.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&lt;</button>
               {quickMonths.map((m) => (
                 <button key={m} onClick={() => setMonthView(m)} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid " + (monthView === m ? theme.accent : theme.border), background: monthView === m ? theme.accentBg : "transparent", color: monthView === m ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
-                  {formatMonth(m)}
+                  {new Date(m + "-01").toLocaleDateString("en-SG", { month: "short", year: "numeric" })}
                 </button>
               ))}
               <button onClick={() => { const d = new Date(viewParts[0], viewParts[1], 1); setMonthView(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid " + theme.border, background: "transparent", color: theme.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&gt;</button>
