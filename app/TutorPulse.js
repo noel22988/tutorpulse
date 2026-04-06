@@ -545,6 +545,8 @@ export default function TutorPulse() {
   const [studentFilter, setStudentFilter] = useState("all");
   const searchRef = useRef("");
   const [scheduleViewMode, setScheduleViewMode] = useState("today");
+  const [schedCalOpen, setSchedCalOpen] = useState(false);
+  const [schedNavDate, setSchedNavDate] = useState(new Date()); // nav anchor for today/week/month views
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [monthView, setMonthView] = useState(() => {
@@ -835,20 +837,30 @@ export default function TutorPulse() {
 
       {/* Backup Reminder */}
       {(() => {
+        if ((store.settings || {}).backupReminder === false) return null;
         const lastExport = localStorage.getItem("tutorpulse-last-export");
         const snoozed = localStorage.getItem("tutorpulse-backup-snoozed");
         const daysSince = lastExport ? Math.floor((Date.now() - new Date(lastExport).getTime()) / 86400000) : null;
         const snoozeDays = snoozed ? Math.floor((Date.now() - new Date(snoozed).getTime()) / 86400000) : 999;
-        const shouldShow = store.students.length > 0 && (daysSince === null || daysSince >= 7) && snoozeDays >= 3;
+        const shouldShow = store.students.length > 0 && (daysSince === null || daysSince >= 7) && snoozeDays >= 7;
         return shouldShow ? (
           <Card style={{ marginBottom: 16, padding: 14, borderColor: theme.accent + "44", background: theme.accentBg }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
               <Icon name="download" size={18} color={theme.accent} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: theme.accent }}>{daysSince === null ? "You haven't backed up your data yet" : "Back up your data — " + daysSince + " days since last export"}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: theme.accent }}>Save a copy to your phone</div>
+                <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 2 }}>Your data is safe in the app. This protects you if you switch phones or clear your browser.</div>
               </div>
-              <button onClick={() => { setPage("admin"); }} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid " + theme.accent, background: "transparent", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Back up</button>
-              <button onClick={() => { localStorage.setItem("tutorpulse-backup-snoozed", new Date().toISOString()); addToast("Reminder snoozed for 3 days"); }} style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 10, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Later</button>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button onClick={() => {
+                const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url; a.download = "TutorPulse-Backup-" + new Date().toISOString().split("T")[0] + ".json"; a.click(); URL.revokeObjectURL(url);
+                localStorage.setItem("tutorpulse-last-export", new Date().toISOString());
+                addToast("Backup downloaded");
+              }} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid " + theme.accent, background: "transparent", color: theme.accent, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Download copy</button>
+              <button onClick={() => { localStorage.setItem("tutorpulse-backup-snoozed", new Date().toISOString()); addToast("Reminder snoozed"); }} style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Remind me next week</button>
             </div>
           </Card>
         ) : null;
@@ -911,6 +923,10 @@ export default function TutorPulse() {
             <Icon name="message" size={24} color={theme.warning} />
             <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Broadcast</div>
           </Card>
+          <Card hover onClick={() => { setStudentsTab("classes"); setShowNewClass(true); setPage("students"); }} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="users" size={24} color={theme.purple} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Add Class</div>
+          </Card>
         </div>
       </div>
 
@@ -941,208 +957,196 @@ export default function TutorPulse() {
     const month = calendarDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDay = new Date(year, month, 1).getDay();
-
     const calendarDays = [];
     for (let i = 0; i < firstDay; i++) calendarDays.push(null);
     for (let i = 1; i <= daysInMonth; i++) calendarDays.push(i);
 
     const getLessonsForDay = (day) => {
       if (!day) return [];
-      return store.lessons.filter((l) => {
-        const d = new Date(l.date);
-        return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
-      }).sort((a, b) => new Date(a.date) - new Date(b.date));
+      return store.lessons.filter((l) => { const d = new Date(l.date); return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year; }).sort((a, b) => new Date(a.date) - new Date(b.date));
     };
+    const getBlocksForDay = (y, m, d) => (store.blocks || []).filter(b => { const bd = new Date(b.date); return bd.getDate() === d && bd.getMonth() === m && bd.getFullYear() === y; });
+    const getDateStr = (dt) => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
 
-    const monthLessons = store.lessons.filter((l) => {
-      const d = new Date(l.date);
-      return d.getMonth() === month && d.getFullYear() === year;
-    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Nav helpers
+    const navDate = schedNavDate;
+    const navPrev = () => {
+      if (viewMode === "today") setSchedNavDate(new Date(navDate.getFullYear(), navDate.getMonth(), navDate.getDate() - 1));
+      else if (viewMode === "week") setSchedNavDate(new Date(navDate.getFullYear(), navDate.getMonth(), navDate.getDate() - 7));
+      else if (viewMode === "month") { setSchedNavDate(new Date(navDate.getFullYear(), navDate.getMonth() - 1, 1)); setCalendarDate(new Date(navDate.getFullYear(), navDate.getMonth() - 1, 1)); }
+    };
+    const navNext = () => {
+      if (viewMode === "today") setSchedNavDate(new Date(navDate.getFullYear(), navDate.getMonth(), navDate.getDate() + 1));
+      else if (viewMode === "week") setSchedNavDate(new Date(navDate.getFullYear(), navDate.getMonth(), navDate.getDate() + 7));
+      else if (viewMode === "month") { setSchedNavDate(new Date(navDate.getFullYear(), navDate.getMonth() + 1, 1)); setCalendarDate(new Date(navDate.getFullYear(), navDate.getMonth() + 1, 1)); }
+    };
+    const navToday = () => { setSchedNavDate(new Date()); setCalendarDate(new Date()); };
 
-    const todayAllLessons = store.lessons.filter((l) => {
-      const d = new Date(l.date);
-      return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Week helpers
+    const weekStart = new Date(navDate); const dow = weekStart.getDay(); weekStart.setDate(weekStart.getDate() - (dow === 0 ? 6 : dow - 1)); weekStart.setHours(0,0,0,0);
+    const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
 
-    const selectedDayLessons = selectedDay ? getLessonsForDay(selectedDay) : [];
+    // View date label
+    const navLabel = viewMode === "today" ? navDate.toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long" })
+      : viewMode === "week" ? weekDays[0].toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " \u2013 " + weekDays[6].toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })
+      : navDate.toLocaleDateString("en-SG", { month: "long", year: "numeric" });
+
+    // Get lessons/blocks for a date
+    const getItemsForDate = (dt) => {
+      const lessons = store.lessons.filter(l => { const d = new Date(l.date); return d.getDate() === dt.getDate() && d.getMonth() === dt.getMonth() && d.getFullYear() === dt.getFullYear(); }).sort((a, b) => new Date(a.date) - new Date(b.date));
+      const blocks = getBlocksForDay(dt.getFullYear(), dt.getMonth(), dt.getDate());
+      return [...lessons.map(l => ({ type: "lesson", data: l, time: new Date(l.date).getTime() })), ...blocks.map(b => ({ type: "block", data: b, time: new Date(b.date).getTime() }))].sort((a, b) => a.time - b.time);
+    };
 
     const renderLessonCard = (lesson) => {
       const student = getStudent(lesson.studentId);
       return (
-        <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ minWidth: 54, textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500 }}>{formatDate(lesson.date).split(",")[0]}</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent }}>{new Date(lesson.date).getDate()}</div>
-            </div>
-            <div style={{ width: 1, height: 40, background: theme.border }} />
-            <Avatar initials={student ? student.avatar : "?"} size={32} />
+        <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Avatar initials={student ? student.avatar : "?"} size={28} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 13 }}>{student ? student.name : "Unknown"}</div>
-              <div style={{ fontSize: 12, color: theme.textSecondary }}>{lesson.subject}</div>
+              <div style={{ fontSize: 11, color: theme.textSecondary }}>{lesson.subject}</div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{formatTime(lesson.date)}</div>
-              <Badge text={lesson.status} color={getStatusColor(lesson.status)} bg={getStatusBg(lesson.status)} />
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{formatTime(lesson.date)}</div>
+              <div style={{ fontSize: 10, color: theme.textMuted }}>{lesson.duration} min</div>
             </div>
+            <Badge text={lesson.status} color={getStatusColor(lesson.status)} bg={getStatusBg(lesson.status)} />
           </div>
         </Card>
       );
     };
 
+    const renderBlockCard = (block) => (
+      <Card key={block.id} style={{ padding: 12, borderLeft: "3px solid " + theme.textMuted, opacity: 0.8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: theme.bgInput, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="x" size={14} color={theme.textMuted} /></div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: theme.textMuted }}>{block.label || "Busy"}</div>
+            <div style={{ fontSize: 11, color: theme.textMuted }}>{block.allDay ? "All day" : formatTime(block.date) + " \u00b7 " + block.duration + " min"}</div>
+          </div>
+          <button onClick={() => { if (window.confirm("Remove this block?")) deleteBlock(block.id); }} style={{ background: "none", border: "none", color: theme.danger, fontSize: 10, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Remove</button>
+        </div>
+      </Card>
+    );
+
+    const renderDaySection = (dt, items) => {
+      const dateStr = getDateStr(dt);
+      const holiday = getHoliday(dateStr);
+      const isToday = dt.getDate() === now.getDate() && dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear();
+      return (
+        <div key={dateStr} style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: isToday ? theme.accent : theme.text }}>{dt.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" })}</div>
+            {isToday && <Badge text="today" color={theme.accent} bg={theme.accentBg} />}
+            {holiday && <span style={{ fontSize: 10, color: theme.warning, fontWeight: 600 }}>{holiday.name}</span>}
+          </div>
+          {items.length === 0 ? (
+            <div style={{ fontSize: 12, color: theme.textMuted, padding: "4px 0" }}>No lessons</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {items.map(item => item.type === "lesson" ? renderLessonCard(item.data) : renderBlockCard(item.data))}
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div className="fade-in">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h1 style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Schedule</h1>
-<div style={{ display: "flex", gap: 6 }}><Button size="sm" variant="secondary" onClick={() => { setBlockForm({ date: new Date().toISOString().split("T")[0], time: "09:00", duration: "60", label: "", allDay: false, recurrence: "none", endDate: "" }); setShowBlockTime(true); }}>Block Time</Button><Button size="sm" icon="plus" onClick={() => setShowNewLesson(true)}>New Lesson</Button></div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <Button size="sm" variant="secondary" onClick={() => { setBlockForm({ date: new Date().toISOString().split("T")[0], time: "09:00", duration: "60", label: "", allDay: false, recurrence: "none", endDate: "" }); setShowBlockTime(true); }}>Unavailable</Button>
+            <Button size="sm" icon="plus" onClick={() => setShowNewLesson(true)}>New Lesson</Button>
+          </div>
         </div>
 
-        <TabBar tabs={[{ id: "today", label: "Today" }, { id: "month", label: "This Month" }, { id: "calendar", label: "Calendar" }]} active={viewMode} onChange={(v) => { setViewMode(v); setSelectedDay(null); }} />
-
-        {viewMode === "today" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {todayAllLessons.length === 0 ? (
-              <EmptyState icon="calendar" title="No lessons today" sub="Enjoy your day off!" />
-            ) : todayAllLessons.map(renderLessonCard)}
+        {/* Collapsible Calendar */}
+        <Card style={{ marginBottom: 12, padding: schedCalOpen ? 14 : 10, cursor: "pointer" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => setSchedCalOpen(!schedCalOpen)}>
+            <button onClick={(e) => { e.stopPropagation(); setCalendarDate(new Date(year, month - 1, 1)); }} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&lt;</button>
+            <div style={{ fontSize: 14, fontWeight: 700, color: theme.text }}>{new Date(year, month).toLocaleDateString("en-SG", { month: "long", year: "numeric" })}</div>
+            <Icon name={schedCalOpen ? "chevUp" : "chevDown"} size={14} color={theme.textMuted} />
+            <button onClick={(e) => { e.stopPropagation(); setCalendarDate(new Date(year, month + 1, 1)); }} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&gt;</button>
           </div>
-        )}
-
-        {viewMode === "month" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {monthLessons.length === 0 ? (
-              <EmptyState icon="calendar" title="No lessons this month" sub="Schedule a lesson to get started" />
-            ) : monthLessons.map(renderLessonCard)}
-          </div>
-        )}
-
-        {viewMode === "calendar" && (
-          <>
-            <Card>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
-                <button onClick={() => { setCalendarDate(new Date(year, month - 1, 1)); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", lineHeight: 1 }}>&lt;</button>
-                <select value={month} onChange={(e) => { setCalendarDate(new Date(year, parseInt(e.target.value), 1)); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
-                  {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
-                    <option key={i} value={i}>{m}</option>
-                  ))}
-                </select>
-                <select value={year} onChange={(e) => { setCalendarDate(new Date(parseInt(e.target.value), month, 1)); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", appearance: "none", textAlign: "center" }}>
-                  {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-                <button onClick={() => { setCalendarDate(new Date(year, month + 1, 1)); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", lineHeight: 1 }}>&gt;</button>
-                <button onClick={() => { setCalendarDate(new Date()); setSelectedDay(null); }} style={{ padding: "6px 10px", background: theme.accentBg, border: "1px solid " + theme.accent + "44", borderRadius: 8, color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Today</button>
-              </div>
+          {schedCalOpen && (
+            <div style={{ marginTop: 10 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
-                {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                  <div key={i} style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, padding: "8px 0" }}>{d}</div>
-                ))}
+                {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (<div key={i} style={{ fontSize: 10, fontWeight: 600, color: theme.textMuted, padding: "4px 0" }}>{d}</div>))}
                 {calendarDays.map((day, i) => {
                   const lessons = getLessonsForDay(day);
+                  const blocks = day ? getBlocksForDay(year, month, day) : [];
                   const isToday = day && day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
                   const isSelected = day && day === selectedDay;
+                  const dateStr = day ? year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0") : "";
+                  const holiday = day ? getHoliday(dateStr) : null;
                   return (
-                    <div key={i} onClick={() => { if (day) setSelectedDay(selectedDay === day ? null : day); }} style={{ padding: "6px 2px", minHeight: 48, borderRadius: 8, background: isSelected ? theme.accent + "22" : isToday ? theme.accentBg : "transparent", border: isSelected ? "1px solid " + theme.accent : isToday ? "1px solid " + theme.accent + "44" : "1px solid transparent", cursor: day ? "pointer" : "default" }}>
-                      {day && (
-                        <>
-                          <div style={{ fontSize: 13, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? theme.accent : isToday ? theme.accent : theme.text, marginBottom: 2 }}>{day}</div>
-                          {lessons.length > 0 && (
-                            <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap" }}>
-                              {lessons.map((l, j) => (
-                                <div key={j} style={{ width: 6, height: 6, borderRadius: 3, background: getStatusColor(l.status) }} />
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
+                    <div key={i} onClick={() => { if (day) { setSelectedDay(selectedDay === day ? null : day); setSchedNavDate(new Date(year, month, day)); setViewMode("today"); setSchedCalOpen(false); } }} style={{ padding: "4px 2px", minHeight: 40, borderRadius: 6, background: isSelected ? theme.accent + "22" : isToday ? theme.accentBg : "transparent", border: isSelected ? "1px solid " + theme.accent : isToday ? "1px solid " + theme.accent + "44" : "1px solid transparent", cursor: day ? "pointer" : "default" }}>
+                      {day && (<>
+                        <div style={{ fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? theme.accent : isToday ? theme.accent : theme.text }}>{day}</div>
+                        <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap", marginTop: 1 }}>
+                          {lessons.slice(0, 3).map((l, j) => (<div key={j} style={{ width: 5, height: 5, borderRadius: 3, background: getStatusColor(l.status) }} />))}
+                          {blocks.length > 0 && <div style={{ width: 5, height: 5, borderRadius: 3, background: theme.textMuted }} />}
+                          {holiday && <div style={{ width: 5, height: 5, borderRadius: 3, background: theme.warning }} />}
+                        </div>
+                      </>)}
                     </div>
                   );
                 })}
               </div>
-            </Card>
-            {/* Selected day lessons */}
-            {selectedDay && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: theme.textSecondary, marginBottom: 8 }}>
-                  {new Date(year, month, selectedDay).toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long" })} — {selectedDayLessons.length} lesson{selectedDayLessons.length !== 1 ? "s" : ""}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {selectedDayLessons.length === 0 ? (
-                    <Card style={{ padding: 14 }}><div style={{ fontSize: 13, color: theme.textMuted, textAlign: "center" }}>No lessons on this day</div></Card>
-                  ) : selectedDayLessons.map(renderLessonCard)}
-                </div>
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+                <button onClick={() => navToday()} style={{ padding: "4px 12px", borderRadius: 6, background: theme.accentBg, border: "1px solid " + theme.accent + "44", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Today</button>
               </div>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
+            </div>
+          )}
+        </Card>
 
-  // ═══════════════════════════════════════════════════════════
-  // PAGE: STUDENTS
-  // ═══════════════════════════════════════════════════════════
-  const StudentsPage = () => {
-    const filter = studentFilter; const setFilter = setStudentFilter;
-    const [localSearch, setLocalSearch] = useState(searchRef.current);
-    const filtered = filter === "all" ? store.students : store.students.filter((s) => s.status === filter);
-    const searched = (localSearch ? filtered.filter((s) => s.name.toLowerCase().includes(localSearch.toLowerCase()) || s.level.toLowerCase().includes(localSearch.toLowerCase())) : filtered).sort((a, b) => a.name.localeCompare(b.name));
-
-    return (
-      <div>
-
-        {/* Search */}
-        <div style={{ position: "relative", marginBottom: 16 }}>
-          <input key="student-search" value={localSearch} onChange={(e) => { setLocalSearch(e.target.value); searchRef.current = e.target.value; }} placeholder="Search students..." style={{ width: "100%", padding: "10px 14px 10px 36px", background: theme.bgInput, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.text, outline: "none", fontSize: 14 }} />
-          <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-            <Icon name="search" size={16} color={theme.textMuted} />
+        {/* Tab bar + Nav arrows */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+          <button onClick={navPrev} style={{ padding: "6px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&lt;</button>
+          <div style={{ flex: 1 }}>
+            <TabBar tabs={[{ id: "today", label: "Today" }, { id: "week", label: "This Week" }, { id: "month", label: "This Month" }]} active={viewMode} onChange={(v) => { setViewMode(v); setSelectedDay(null); setSchedNavDate(new Date()); }} />
           </div>
+          <button onClick={navNext} style={{ padding: "6px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&gt;</button>
         </div>
 
-        {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto" }}>
-          {["all", "active", "trial", "paused", "graduated"].map((f) => (
-            <button key={f} onClick={() => setFilter(f)} style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${filter === f ? theme.accent : theme.border}`, background: filter === f ? theme.accentBg : "transparent", color: filter === f ? theme.accent : theme.textSecondary, fontSize: 12, fontWeight: 600, cursor: "pointer", textTransform: "capitalize", whiteSpace: "nowrap", fontFamily: "'DM Sans', sans-serif" }}>
-              {f} {f === "all" ? `(${store.students.length})` : `(${store.students.filter(s => s.status === f).length})`}
-            </button>
-          ))}
-        </div>
+        {/* Nav label */}
+        <div style={{ textAlign: "center", fontSize: 12, color: theme.textSecondary, marginBottom: 12, fontWeight: 600 }}>{navLabel}</div>
 
-        {/* Student cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {searched.map((student) => (
-            <Card key={student.id} hover onClick={() => setSelectedStudent(student)} style={{ padding: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Avatar initials={student.avatar} size={40} color={getStatusColor(student.status)} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{student.name}</span>
-                    <Badge text={student.status} color={getStatusColor(student.status)} bg={getStatusBg(student.status)} />
-                  </div>
-                  <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} · {(student.subjects || []).length > 0 ? student.subjects.map(s => s.subject + (s.stream ? " (" + s.stream + ")" : "")).join(", ") : (student.subject || student.stream || "")}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 700, color: theme.accent }}>${student.hourlyRate}</div>
-                    <div style={{ fontSize: 11, color: theme.textMuted }}>/ hr</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 3 }}>
-                    {student.parentPhone && (
-                      <button onClick={(e) => { e.stopPropagation(); setMessageTarget("parent"); setIncludeSiblings(false); setShowMessageCompose(student.id); }} style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 2 }}>
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>Parent
-                      </button>
-                    )}
-                    {student.studentPhone && (
-                      <button onClick={(e) => { e.stopPropagation(); setMessageTarget("student"); setShowMessageCompose(student.id); }} style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(37, 211, 102, 0.1)", color: "#25D366", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 2 }}>
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>Student
-                      </button>
-                    )}
-                  </div>
-                </div>
+        {/* Today view */}
+        {viewMode === "today" && (() => {
+          const items = getItemsForDate(navDate);
+          const dateStr = getDateStr(navDate);
+          const holiday = getHoliday(dateStr);
+          return (
+            <div>
+              {holiday && <div style={{ fontSize: 12, color: theme.warning, padding: "6px 10px", background: "rgba(245,158,11,0.1)", borderRadius: 8, marginBottom: 10 }}>{holiday.name}</div>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {items.length === 0 ? (<EmptyState icon="calendar" title="No lessons" sub="Enjoy your day!" />) : items.map(item => item.type === "lesson" ? renderLessonCard(item.data) : renderBlockCard(item.data))}
               </div>
-            </Card>
-          ))}
-        </div>
+            </div>
+          );
+        })()}
+
+        {/* Week view */}
+        {viewMode === "week" && (
+          <div>{weekDays.map(dt => renderDaySection(dt, getItemsForDate(dt)))}</div>
+        )}
+
+        {/* Month view */}
+        {viewMode === "month" && (() => {
+          const mYear = navDate.getFullYear(); const mMonth = navDate.getMonth();
+          const dim = new Date(mYear, mMonth + 1, 0).getDate();
+          const days = Array.from({ length: dim }, (_, i) => new Date(mYear, mMonth, i + 1));
+          const daysWithItems = days.filter(dt => getItemsForDate(dt).length > 0);
+          return (
+            <div>
+              {daysWithItems.length === 0 ? (<EmptyState icon="calendar" title="No lessons this month" sub="Schedule a lesson to get started" />) : daysWithItems.map(dt => renderDaySection(dt, getItemsForDate(dt)))}
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -1789,6 +1793,22 @@ export default function TutorPulse() {
                 <span style={{ fontSize: 13, color: theme.textSecondary, flexShrink: 0, width: 100 }}>{(store.settings?.paymentMode || "phone") === "phone" ? "Phone No." : "UEN"}</span>
                 <input type="text" defaultValue={store.settings?.paymentInfo || ""} key={(store.settings?.paymentMode || "phone")} onBlur={(e) => { const val = e.target.value.trim(); setStore((s) => ({ ...s, settings: { ...(s.settings || {}), paymentInfo: val } })); if (val) addToast("Payment details saved"); }} placeholder={(store.settings?.paymentMode || "phone") === "phone" ? "e.g. 9123 4567" : "e.g. 202410124E"} style={{ flex: 1, padding: "8px 12px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }} />
               </div>
+            </Card>
+
+            {/* Preferences */}
+            <Card style={{ marginTop: 16, padding: 14 }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>PREFERENCES</div>
+              {[
+                { key: "phWarnings", label: "Warn when scheduling on public holidays", defaultVal: true },
+                { key: "backupReminder", label: "Weekly backup reminder on dashboard", defaultVal: true },
+              ].map(pref => (
+                <div key={pref.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid " + theme.border }}>
+                  <span style={{ fontSize: 13, color: theme.textSecondary }}>{pref.label}</span>
+                  <button onClick={() => { const current = (store.settings || {})[pref.key]; const newVal = current === undefined ? !pref.defaultVal : !current; setStore(s => ({ ...s, settings: { ...(s.settings || {}), [pref.key]: newVal } })); }} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: ((store.settings || {})[pref.key] !== undefined ? (store.settings || {})[pref.key] : pref.defaultVal) ? theme.accent : theme.bgInput, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                    <div style={{ width: 18, height: 18, borderRadius: "50%", background: "white", position: "absolute", top: 3, left: ((store.settings || {})[pref.key] !== undefined ? (store.settings || {})[pref.key] : pref.defaultVal) ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+                  </button>
+                </div>
+              ))}
             </Card>
 
             {/* Export / Import */}
@@ -3960,7 +3980,8 @@ export default function TutorPulse() {
 
 
       {showBlockTime && (
-        <Modal open={true} onClose={() => setShowBlockTime(false)} title="Block Time" width={440}>
+        <Modal open={true} onClose={() => setShowBlockTime(false)} title="Mark Unavailable" width={440}>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12 }}>Block out time for appointments, rest, or personal commitments.</div>
           <Input label="Date" type="date" value={blockForm.date} onChange={(v) => setBlockForm(f => ({ ...f, date: v }))} />
           {blockForm.date && (store.settings || {}).phWarnings !== false && getHoliday(blockForm.date) && (<div style={{ fontSize: 11, color: theme.warning, padding: "4px 8px", background: "rgba(245,158,11,0.1)", borderRadius: 6, marginTop: -8, marginBottom: 8 }}>Public holiday ({getHoliday(blockForm.date).name})</div>)}
           <div style={{ display: "flex", gap: 2, background: theme.bgInput, borderRadius: 10, padding: 3, marginBottom: 12 }}>
