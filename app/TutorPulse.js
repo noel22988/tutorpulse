@@ -1069,11 +1069,13 @@ export default function TutorPulse() {
 
         {/* Collapsible Calendar */}
         <Card style={{ marginBottom: 12, padding: schedCalOpen ? 14 : 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button onClick={() => setCalendarDate(new Date(year, month - 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&lt;</button>
-            <div style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 700, color: theme.text, cursor: "pointer" }} onClick={() => setSchedCalOpen(!schedCalOpen)}>{new Date(year, month).toLocaleDateString("en-SG", { month: "long", year: "numeric" })}</div>
-            <button onClick={() => setCalendarDate(new Date(year, month + 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&gt;</button>
-            <button onClick={() => setSchedCalOpen(!schedCalOpen)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer" }}><Icon name={schedCalOpen ? "chevUp" : "chevDown"} size={16} color={theme.textMuted} /></button>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <button onClick={() => setCalendarDate(new Date(year, month - 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&lt;</button>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.text, cursor: "pointer" }} onClick={() => setSchedCalOpen(!schedCalOpen)}>{new Date(year, month).toLocaleDateString("en-SG", { month: "long", year: "numeric" })}</div>
+              <button onClick={() => setCalendarDate(new Date(year, month + 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&gt;</button>
+            </div>
+            <button onClick={() => setSchedCalOpen(!schedCalOpen)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}><Icon name={schedCalOpen ? "chevUp" : "chevDown"} size={16} color={theme.textMuted} /></button>
           </div>
           {schedCalOpen && (
             <div style={{ marginTop: 10 }}>
@@ -1103,9 +1105,11 @@ export default function TutorPulse() {
                   );
                 })}
               </div>
-              <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 8, fontSize: 10, color: theme.textMuted }}>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 8, fontSize: 10, color: theme.textMuted, flexWrap: "wrap" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: theme.warning }} />PH</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: theme.success }} />Lesson</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: theme.success }} />Confirmed</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: theme.info }} />Completed</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: theme.danger }} />Cancelled</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: theme.textMuted }} />Blocked</span>
               </div>
               {/* Selected day lessons inline */}
@@ -4083,4 +4087,3 @@ export default function TutorPulse() {
     </div>
   );
 }
-
