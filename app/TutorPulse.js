@@ -109,6 +109,7 @@ const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
     crown: <><path d="M2 20h20M4 20l2-14 4 6 2-8 2 8 4-6 2 14"/></>,
     filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>,
     chevDown: <polyline points="6 9 12 15 18 9"/>,
+    chevUp: <polyline points="6 15 12 9 18 15"/>,
     chevRight: <polyline points="9 18 15 12 9 6"/>,
     arrowLeft: <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
     repeat: <><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></>,
@@ -1064,15 +1065,18 @@ export default function TutorPulse() {
         </div>
 
         {/* Collapsible Calendar */}
-        <Card style={{ marginBottom: 12, padding: schedCalOpen ? 14 : 10, cursor: "pointer" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => setSchedCalOpen(!schedCalOpen)}>
-            <button onClick={(e) => { e.stopPropagation(); setCalendarDate(new Date(year, month - 1, 1)); }} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&lt;</button>
-            <div style={{ fontSize: 14, fontWeight: 700, color: theme.text }}>{new Date(year, month).toLocaleDateString("en-SG", { month: "long", year: "numeric" })}</div>
-            <Icon name={schedCalOpen ? "chevUp" : "chevDown"} size={14} color={theme.textMuted} />
-            <button onClick={(e) => { e.stopPropagation(); setCalendarDate(new Date(year, month + 1, 1)); }} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&gt;</button>
+        <Card style={{ marginBottom: 12, padding: schedCalOpen ? 14 : 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={() => setCalendarDate(new Date(year, month - 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&lt;</button>
+            <div style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 700, color: theme.text, cursor: "pointer" }} onClick={() => setSchedCalOpen(!schedCalOpen)}>{new Date(year, month).toLocaleDateString("en-SG", { month: "long", year: "numeric" })}</div>
+            <button onClick={() => setCalendarDate(new Date(year, month + 1, 1))} style={{ padding: "4px 8px", background: "none", border: "none", color: theme.textMuted, fontSize: 16, cursor: "pointer" }}>&gt;</button>
+            <button onClick={() => setSchedCalOpen(!schedCalOpen)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer" }}><Icon name={schedCalOpen ? "chevUp" : "chevDown"} size={16} color={theme.textMuted} /></button>
           </div>
           {schedCalOpen && (
             <div style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                <button onClick={() => { navToday(); setCalendarDate(new Date()); }} style={{ padding: "4px 12px", borderRadius: 6, background: theme.accentBg, border: "1px solid " + theme.accent + "44", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Today</button>
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
                 {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (<div key={i} style={{ fontSize: 10, fontWeight: 600, color: theme.textMuted, padding: "4px 0" }}>{d}</div>))}
                 {calendarDays.map((day, i) => {
@@ -1083,7 +1087,7 @@ export default function TutorPulse() {
                   const dateStr = day ? year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0") : "";
                   const holiday = day ? getHoliday(dateStr) : null;
                   return (
-                    <div key={i} onClick={() => { if (day) { setSelectedDay(selectedDay === day ? null : day); setSchedNavDate(new Date(year, month, day)); setViewMode("today"); setSchedCalOpen(false); } }} style={{ padding: "4px 2px", minHeight: 40, borderRadius: 6, background: isSelected ? theme.accent + "22" : isToday ? theme.accentBg : "transparent", border: isSelected ? "1px solid " + theme.accent : isToday ? "1px solid " + theme.accent + "44" : "1px solid transparent", cursor: day ? "pointer" : "default" }}>
+                    <div key={i} onClick={() => { if (day) setSelectedDay(selectedDay === day ? null : day); }} style={{ padding: "4px 2px", minHeight: 40, borderRadius: 6, background: isSelected ? theme.accent + "22" : isToday ? theme.accentBg : "transparent", border: isSelected ? "1px solid " + theme.accent : isToday ? "1px solid " + theme.accent + "44" : "1px solid transparent", cursor: day ? "pointer" : "default" }}>
                       {day && (<>
                         <div style={{ fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? theme.accent : isToday ? theme.accent : theme.text }}>{day}</div>
                         <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap", marginTop: 1 }}>
@@ -1096,24 +1100,40 @@ export default function TutorPulse() {
                   );
                 })}
               </div>
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-                <button onClick={() => navToday()} style={{ padding: "4px 12px", borderRadius: 6, background: theme.accentBg, border: "1px solid " + theme.accent + "44", color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Today</button>
-              </div>
+              {/* Selected day lessons inline */}
+              {selectedDay && (() => {
+                const dayItems = getItemsForDate(new Date(year, month, selectedDay));
+                const dateStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(selectedDay).padStart(2, "0");
+                const holiday = getHoliday(dateStr);
+                return (
+                  <div style={{ marginTop: 12, borderTop: "1px solid " + theme.border, paddingTop: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: theme.textSecondary, marginBottom: 8 }}>
+                      {new Date(year, month, selectedDay).toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long" })}
+                      {holiday && <span style={{ fontSize: 10, color: theme.warning, marginLeft: 8 }}>{holiday.name}</span>}
+                    </div>
+                    {dayItems.length === 0 ? (
+                      <div style={{ fontSize: 12, color: theme.textMuted }}>No lessons on this day</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {dayItems.map(item => item.type === "lesson" ? renderLessonCard(item.data) : renderBlockCard(item.data))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </Card>
 
-        {/* Tab bar + Nav arrows */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
-          <button onClick={navPrev} style={{ padding: "6px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&lt;</button>
-          <div style={{ flex: 1 }}>
-            <TabBar tabs={[{ id: "today", label: "Today" }, { id: "week", label: "This Week" }, { id: "month", label: "This Month" }]} active={viewMode} onChange={(v) => { setViewMode(v); setSelectedDay(null); setSchedNavDate(new Date()); }} />
-          </div>
-          <button onClick={navNext} style={{ padding: "6px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&gt;</button>
-        </div>
+        {/* Tab bar */}
+        <TabBar tabs={[{ id: "today", label: "Today" }, { id: "week", label: "This Week" }, { id: "month", label: "This Month" }]} active={viewMode} onChange={(v) => { setViewMode(v); setSelectedDay(null); setSchedNavDate(new Date()); }} />
 
-        {/* Nav label */}
-        <div style={{ textAlign: "center", fontSize: 12, color: theme.textSecondary, marginBottom: 12, fontWeight: 600 }}>{navLabel}</div>
+        {/* Nav label with arrows */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12 }}>
+          <button onClick={navPrev} style={{ padding: "4px 8px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 6, color: theme.text, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&lt;</button>
+          <div style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 600 }}>{navLabel}</div>
+          <button onClick={navNext} style={{ padding: "4px 8px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 6, color: theme.text, fontSize: 14, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>&gt;</button>
+        </div>
 
         {/* Today view */}
         {viewMode === "today" && (() => {
@@ -4008,3 +4028,4 @@ export default function TutorPulse() {
     </div>
   );
 }
+
