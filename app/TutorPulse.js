@@ -877,7 +877,7 @@ export default function TutorPulse() {
           <Button variant="ghost" size="sm" onClick={() => setPage("schedule")}>View all →</Button>
         </div>
         {todayLessons.length === 0 ? (
-          <Card><EmptyState icon="calendar" title="No lessons today" sub="Enjoy your day off!" /></Card>
+          <Card><div style={{ padding: "14px 20px", textAlign: "center", color: theme.textMuted, fontSize: 13 }}>No lessons today — enjoy your day off!</div></Card>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {todayLessons.map((lesson, i) => {
@@ -1787,9 +1787,26 @@ export default function TutorPulse() {
                 });
               })()}
             </Card>
+
+            {/* Schools Breakdown */}
+            <Card style={{ marginTop: 12 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Schools</h3>
+              {(() => {
+                const schools = {};
+                store.students.forEach(s => { const sList = s.schools || []; if (sList.length > 0) schools[sList[sList.length - 1].name] = (schools[sList[sList.length - 1].name] || 0) + 1; });
+                const sorted = Object.entries(schools).sort((a, b) => b[1] - a[1]);
+                if (sorted.length < 1) return <div style={{ fontSize: 12, color: theme.textMuted }}>Add schools to your students to see this breakdown.</div>;
+                const max = sorted[0][1];
+                return sorted.map(([name, count]) => (
+                  <div key={name} style={{ marginBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: theme.textSecondary, marginBottom: 2 }}><span>{name}</span><span style={{ fontWeight: 700 }}>{count}</span></div>
+                    <div style={{ height: 6, background: theme.bgInput, borderRadius: 3, overflow: "hidden" }}><div style={{ height: "100%", width: (count / max * 100) + "%", background: theme.info, borderRadius: 3 }} /></div>
+                  </div>
+                ));
+              })()}
+            </Card>
           </>
         )}
-
         {adminTab === "analytics" && (() => {
           const allWidgets = [
             { id: "revenue_forecast", label: "Revenue Forecast", render: () => (
