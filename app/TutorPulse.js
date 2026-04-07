@@ -777,69 +777,7 @@ export default function TutorPulse() {
   // ═══════════════════════════════════════════════════════════
   // PAGE: HOME DASHBOARD
   // ═══════════════════════════════════════════════════════════
-  const HomePage = () => (
-    <div className="fade-in">
-      {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 13, color: theme.textMuted, fontWeight: 500, marginBottom: 4 }}>
-          {now.toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-        </div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Playfair Display', serif", lineHeight: 1.2 }}>
-          Hi, {store.settings?.tutorName || "there"}
-        </h1>
-      </div>
-
-      {/* Stats Row */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4, alignItems: "stretch" }}>
-        <div onClick={() => setPage("students")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} /></div>
-        <div onClick={() => setPage("schedule")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={(() => { const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1); const tmrCount = store.lessons.filter(l => { const d = new Date(l.date); return d.getDate() === tmr.getDate() && d.getMonth() === tmr.getMonth() && d.getFullYear() === tmr.getFullYear() && l.status !== "cancelled"; }).length; return tmrCount + " tomorrow"; })()} color={theme.info} /></div>
-        <div onClick={() => setPage("payments")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={(() => {
-          const cm = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-          let count = 0;
-          pendingPayments.forEach(sid => {
-            const s = getStudent(sid);
-            if (s && s.paymentMode === "per_lesson") {
-              count += store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === sid && d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === cm && (l.status !== "cancelled" || l.collectedButCancelled) && !l.excludeFromBilling && !store.payments.find(p => p.studentId === sid && p.month === cm && p.lessonId === l.id && p.status === "paid"); }).length;
-            } else { count++; }
-          });
-          return count + " unpaid";
-        })()} color={theme.success} /></div>
-      </div>
-
-      {/* Today's Schedule */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Today's Schedule</h2>
-          <Button variant="ghost" size="sm" onClick={() => setPage("schedule")}>View all →</Button>
-        </div>
-        {todayLessons.length === 0 ? (
-          <Card><EmptyState icon="calendar" title="No lessons today" sub="Enjoy your day off!" /></Card>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {todayLessons.map((lesson, i) => {
-              const student = getStudent(lesson.studentId);
-              return (
-                <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 16 }} className={`slide-up stagger-${i + 1}`}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <div style={{ width: 4, height: 48, borderRadius: 2, background: getStatusColor(lesson.status), flexShrink: 0 }} />
-                    <Avatar initials={student ? student.avatar : "?"} size={36} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{student ? student.name : "Unknown"}</div>
-                      <div style={{ fontSize: 12, color: theme.textSecondary }}>{lesson.subject}</div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: theme.accent }}>{formatTime(lesson.date)}</div>
-                      <div style={{ fontSize: 11, color: theme.textMuted }}>{lesson.duration} min · {lesson.location}</div>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Backup Reminder */}
+       {/* Backup Reminder */}
       {(() => {
         if ((store.settings || {}).backupReminder === false) return null;
         const lastExport = localStorage.getItem("tutorpulse-last-export");
@@ -902,6 +840,68 @@ export default function TutorPulse() {
           </Card>
         );
       })()}
+
+  const HomePage = () => (
+    <div className="fade-in">
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 13, color: theme.textMuted, fontWeight: 500, marginBottom: 4 }}>
+          {now.toLocaleDateString("en-SG", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        </div>
+        <h1 style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Playfair Display', serif", lineHeight: 1.2 }}>
+          Hi, {store.settings?.tutorName || "there"}
+        </h1>
+      </div>
+
+      {/* Stats Row */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4, alignItems: "stretch" }}>
+        <div onClick={() => setPage("students")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} /></div>
+        <div onClick={() => setPage("schedule")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="calendar" label="Today's Lessons" value={todayLessons.length} sub={(() => { const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1); const tmrCount = store.lessons.filter(l => { const d = new Date(l.date); return d.getDate() === tmr.getDate() && d.getMonth() === tmr.getMonth() && d.getFullYear() === tmr.getFullYear() && l.status !== "cancelled"; }).length; return tmrCount + " tomorrow"; })()} color={theme.info} /></div>
+        <div onClick={() => setPage("payments")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="dollar" label="This Month" value={`$${store.students.filter(s => s.status === "active").reduce((sum, s) => sum + calcMonthlyFee(s.id, now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")).total, 0).toLocaleString()}`} sub={(() => {
+          const cm = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+          let count = 0;
+          pendingPayments.forEach(sid => {
+            const s = getStudent(sid);
+            if (s && s.paymentMode === "per_lesson") {
+              count += store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === sid && d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") === cm && (l.status !== "cancelled" || l.collectedButCancelled) && !l.excludeFromBilling && !store.payments.find(p => p.studentId === sid && p.month === cm && p.lessonId === l.id && p.status === "paid"); }).length;
+            } else { count++; }
+          });
+          return count + " unpaid";
+        })()} color={theme.success} /></div>
+      </div>
+
+      {/* Today's Schedule */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Today's Schedule</h2>
+          <Button variant="ghost" size="sm" onClick={() => setPage("schedule")}>View all →</Button>
+        </div>
+        {todayLessons.length === 0 ? (
+          <Card><EmptyState icon="calendar" title="No lessons today" sub="Enjoy your day off!" /></Card>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {todayLessons.map((lesson, i) => {
+              const student = getStudent(lesson.studentId);
+              return (
+                <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 16 }} className={`slide-up stagger-${i + 1}`}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ width: 4, height: 48, borderRadius: 2, background: getStatusColor(lesson.status), flexShrink: 0 }} />
+                    <Avatar initials={student ? student.avatar : "?"} size={36} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{student ? student.name : "Unknown"}</div>
+                      <div style={{ fontSize: 12, color: theme.textSecondary }}>{lesson.subject}</div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: theme.accent }}>{formatTime(lesson.date)}</div>
+                      <div style={{ fontSize: 11, color: theme.textMuted }}>{lesson.duration} min · {lesson.location}</div>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Quick Actions */}
       <div style={{ marginBottom: 24 }}>
