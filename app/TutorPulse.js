@@ -44,7 +44,7 @@ const autoBackup = (data) => {
     const now = new Date();
     // Only backup if past 2am
     if (now.getHours() < 2) return;
-    const today = now.toISOString().split("T")[0];
+    const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const backupKey = BACKUP_PREFIX + today;
     // Skip if today's backup already exists
     if (window.localStorage.getItem(backupKey)) return;
@@ -66,7 +66,7 @@ const listBackups = () => {
     if (!window.localStorage) return backups;
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith(BACKUP_PREFIX)) {
+      if (key && key.startsWith(BACKUP_PREFIX) && /\d{4}-\d{2}-\d{2}/.test(key.replace(BACKUP_PREFIX, ""))) {
         const date = key.replace(BACKUP_PREFIX, "");
         const raw = window.localStorage.getItem(key);
         const size = raw ? Math.round(raw.length / 1024) : 0;
@@ -1098,7 +1098,7 @@ export default function TutorPulse() {
                         <div style={{ fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? theme.accent : isToday ? theme.accent : theme.text }}>{day}</div>
                         <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap", marginTop: 1 }}>
                           {holiday && <div style={{ width: 5, height: 5, borderRadius: 3, background: theme.warning }} />}
-                          {lessons.slice(0, 3).map((l, j) => (<div key={j} style={{ width: 5, height: 5, borderRadius: 3, background: getStatusColor(l.status) }} />))}
+                          {lessons.map((l, j) => (<div key={j} style={{ width: 5, height: 5, borderRadius: 3, background: getStatusColor(l.status) }} />))}
                           {blocks.length > 0 && <div style={{ width: 5, height: 5, borderRadius: 3, background: theme.textMuted }} />}
                         </div>
                       </>)}
