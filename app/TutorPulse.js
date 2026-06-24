@@ -44,7 +44,7 @@ const autoBackup = (data) => {
     const now = new Date();
     // Only backup if past 2am
     if (now.getHours() < 2) return;
-    const today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    const today = now.toISOString().split("T")[0];
     const backupKey = BACKUP_PREFIX + today;
     // Skip if today's backup already exists
     if (window.localStorage.getItem(backupKey)) return;
@@ -66,7 +66,7 @@ const listBackups = () => {
     if (!window.localStorage) return backups;
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith(BACKUP_PREFIX) && /\d{4}-\d{2}-\d{2}/.test(key.replace(BACKUP_PREFIX, ""))) {
+      if (key && key.startsWith(BACKUP_PREFIX)) {
         const date = key.replace(BACKUP_PREFIX, "");
         const raw = window.localStorage.getItem(key);
         const size = raw ? Math.round(raw.length / 1024) : 0;
@@ -853,6 +853,7 @@ export default function TutorPulse() {
         );
       })()}
 
+
       {/* Stats Row */}
       <div style={{ display: "flex", gap: 12, marginBottom: 24, overflowX: "auto", paddingBottom: 4, alignItems: "stretch" }}>
         <div onClick={() => setPage("students")} style={{ flex: "0 0 150px", cursor: "pointer", display: "flex" }}><StatCard icon="users" label="Active Students" value={activeStudents.length} sub={`${store.students.filter(s => s.status === "trial").length} on trial`} /></div>
@@ -870,38 +871,6 @@ export default function TutorPulse() {
         })()} color={theme.success} /></div>
       </div>
 
-      {/* Today's Schedule */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Today's Schedule</h2>
-          <Button variant="ghost" size="sm" onClick={() => setPage("schedule")}>View all →</Button>
-        </div>
-        {todayLessons.length === 0 ? (
-          <Card><div style={{ padding: "14px 20px", textAlign: "center", color: theme.textMuted, fontSize: 13 }}>No lessons today — enjoy your day off!</div></Card>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {todayLessons.map((lesson, i) => {
-              const student = getStudent(lesson.studentId);
-              return (
-                <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 16 }} className={`slide-up stagger-${i + 1}`}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <div style={{ width: 4, height: 48, borderRadius: 2, background: getStatusColor(lesson.status), flexShrink: 0 }} />
-                    <Avatar initials={student ? student.avatar : "?"} size={36} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{student ? student.name : "Unknown"}</div>
-                      <div style={{ fontSize: 12, color: theme.textSecondary }}>{lesson.subject}</div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: theme.accent }}>{formatTime(lesson.date)}</div>
-                      <div style={{ fontSize: 11, color: theme.textMuted }}>{lesson.duration} min · {lesson.location}</div>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
       {/* Quick Actions */}
       <div style={{ marginBottom: 24 }}>
@@ -932,6 +901,39 @@ export default function TutorPulse() {
             <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Add Class</div>
           </Card>
         </div>
+      </div>
+
+      {/* Today's Schedule */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Today's Schedule</h2>
+          <Button variant="ghost" size="sm" onClick={() => setPage("schedule")}>View all →</Button>
+        </div>
+        {todayLessons.length === 0 ? (
+          <Card><EmptyState icon="calendar" title="No lessons today" sub="Enjoy your day off!" /></Card>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {todayLessons.map((lesson, i) => {
+              const student = getStudent(lesson.studentId);
+              return (
+                <Card key={lesson.id} hover onClick={() => { setSelectedLesson(lesson); setLessonComment(lesson.comment || ""); }} style={{ padding: 16 }} className={`slide-up stagger-${i + 1}`}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ width: 4, height: 48, borderRadius: 2, background: getStatusColor(lesson.status), flexShrink: 0 }} />
+                    <Avatar initials={student ? student.avatar : "?"} size={36} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{student ? student.name : "Unknown"}</div>
+                      <div style={{ fontSize: 12, color: theme.textSecondary }}>{lesson.subject}</div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: theme.accent }}>{formatTime(lesson.date)}</div>
+                      <div style={{ fontSize: 11, color: theme.textMuted }}>{lesson.duration} min · {lesson.location}</div>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Alerts */}
@@ -1098,7 +1100,7 @@ export default function TutorPulse() {
                         <div style={{ fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? theme.accent : isToday ? theme.accent : theme.text }}>{day}</div>
                         <div style={{ display: "flex", gap: 2, justifyContent: "center", flexWrap: "wrap", marginTop: 1 }}>
                           {holiday && <div style={{ width: 5, height: 5, borderRadius: 3, background: theme.warning }} />}
-                          {lessons.map((l, j) => (<div key={j} style={{ width: 5, height: 5, borderRadius: 3, background: getStatusColor(l.status) }} />))}
+                          {lessons.slice(0, 3).map((l, j) => (<div key={j} style={{ width: 5, height: 5, borderRadius: 3, background: getStatusColor(l.status) }} />))}
                           {blocks.length > 0 && <div style={{ width: 5, height: 5, borderRadius: 3, background: theme.textMuted }} />}
                         </div>
                       </>)}
@@ -1787,26 +1789,9 @@ export default function TutorPulse() {
                 });
               })()}
             </Card>
-
-            {/* Schools Breakdown */}
-            <Card style={{ marginTop: 12 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, fontFamily: "'Playfair Display', serif" }}>Schools</h3>
-              {(() => {
-                const schools = {};
-                store.students.forEach(s => { const sList = s.schools || []; if (sList.length > 0) schools[sList[sList.length - 1].name] = (schools[sList[sList.length - 1].name] || 0) + 1; });
-                const sorted = Object.entries(schools).sort((a, b) => b[1] - a[1]);
-                if (sorted.length < 1) return <div style={{ fontSize: 12, color: theme.textMuted }}>Add schools to your students to see this breakdown.</div>;
-                const max = sorted[0][1];
-                return sorted.map(([name, count]) => (
-                  <div key={name} style={{ marginBottom: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: theme.textSecondary, marginBottom: 2 }}><span>{name}</span><span style={{ fontWeight: 700 }}>{count}</span></div>
-                    <div style={{ height: 6, background: theme.bgInput, borderRadius: 3, overflow: "hidden" }}><div style={{ height: "100%", width: (count / max * 100) + "%", background: theme.info, borderRadius: 3 }} /></div>
-                  </div>
-                ));
-              })()}
-            </Card>
           </>
         )}
+
         {adminTab === "analytics" && (() => {
           const allWidgets = [
             { id: "revenue_forecast", label: "Revenue Forecast", render: () => (
@@ -2559,7 +2544,32 @@ export default function TutorPulse() {
           const invoices = buildAllInvoices(sid);
           if (invoices.length === 0) return "";
           const first = invoices[0];
-          let msg = "Hi " + first.student.parent + ",\n\n";
+          // ── DIAGNOSTIC (temporary) ──────────────────────────────
+          let diag = "🔍 DIAGNOSTIC (remove later)\n";
+          diag += "Invoice month: " + invoiceMonth + "\n";
+          invoices.forEach(inv => {
+            const withComments = inv.monthLessons.filter(l => l.comment && l.comment.trim());
+            diag += inv.student.name + ": " + inv.monthLessons.length + " lessons in month, " + withComments.length + " with feedback\n";
+            inv.monthLessons.forEach(l => {
+              const d = new Date(l.date);
+              diag += "  • " + d.toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " [" + l.status + "] comment=" + (l.comment ? '"' + l.comment.substring(0, 30) + '"' : "EMPTY") + "\n";
+            });
+          });
+          // Also check ALL lessons this student has for that month regardless of filters
+          invoices.forEach(inv => {
+            const [iy, imo] = invoiceMonth.split("-").map(Number);
+            const allForMonth = store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === inv.student.id && d.getMonth() === imo - 1 && d.getFullYear() === iy; });
+            const excludedCount = allForMonth.length - inv.monthLessons.length;
+            if (excludedCount > 0) {
+              diag += inv.student.name + ": " + excludedCount + " lesson(s) EXCLUDED from invoice:\n";
+              allForMonth.filter(l => !inv.monthLessons.find(ml => ml.id === l.id)).forEach(l => {
+                diag += "  ✗ [" + l.status + "] waive=" + (l.excludeFromBilling || false) + " comment=" + (l.comment ? "YES" : "no") + "\n";
+              });
+            }
+          });
+          diag += "─────────────\n\n";
+
+          let msg = diag + "Hi " + first.student.parent + ",\n\n";
           let grandTotal = 0;
           invoices.forEach((inv, i) => {
             if (invoices.length > 1) msg += "\u2014\u2014\u2014 " + inv.student.name + " \u2014\u2014\u2014\n\n";
@@ -3782,6 +3792,9 @@ export default function TutorPulse() {
                 <Input label="Parent Email" value={studentEditForm.parentEmail} onChange={(v) => uf("parentEmail", v)} />
                 <PhoneInput label="Student Phone (optional)" value={studentEditForm.studentPhone || ""} onChange={(v) => uf("studentPhone", v)} />
                 <Input label="Student Email (optional)" value={studentEditForm.studentEmail || ""} onChange={(v) => uf("studentEmail", v)} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }, { value: "graduated", label: "Graduated" }]} /></div>
+                <Select label="Payment Mode" value={studentEditForm.paymentMode || "monthly"} onChange={(v) => uf("paymentMode", v)} options={[{ value: "monthly", label: "Monthly" }, { value: "per_lesson", label: "Per Lesson" }]} />
+                <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
                 <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 600, marginBottom: 6, letterSpacing: 0.5 }}>SCHOOL HISTORY</div>
                 {(studentEditForm.schools || []).map((sch, si) => (
                   <div key={si} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, padding: "4px 8px", background: theme.bgInput, borderRadius: 8 }}>
@@ -3795,9 +3808,6 @@ export default function TutorPulse() {
                   <Input label="" value={studentEditForm._newSchoolYear || new Date().getFullYear().toString()} onChange={(v) => uf("_newSchoolYear", v)} placeholder="Year" />
                   <button onClick={() => { if (!studentEditForm._newSchool) return; uf("schools", [...(studentEditForm.schools || []), { name: studentEditForm._newSchool, from: studentEditForm._newSchoolYear || new Date().getFullYear().toString() }]); uf("_newSchool", ""); }} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid " + theme.border, background: theme.bgElevated, color: theme.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>Add</button>
                 </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}><Input label="Hourly Rate ($)" type="number" value={studentEditForm.hourlyRate} onChange={(v) => uf("hourlyRate", v)} /><Select label="Status" value={studentEditForm.status} onChange={(v) => uf("status", v)} options={[{ value: "active", label: "Active" }, { value: "trial", label: "Trial" }, { value: "paused", label: "Paused" }, { value: "graduated", label: "Graduated" }]} /></div>
-                <Select label="Payment Mode" value={studentEditForm.paymentMode || "monthly"} onChange={(v) => uf("paymentMode", v)} options={[{ value: "monthly", label: "Monthly" }, { value: "per_lesson", label: "Per Lesson" }]} />
-                <Input label="Address" value={studentEditForm.address} onChange={(v) => uf("address", v)} />
                 <Select label="How did this student find you?" value={studentEditForm.referralSource || ""} onChange={(v) => uf("referralSource", v)} options={REFERRAL_OPTIONS} />
                 <Input label="Notes" value={studentEditForm.notes} onChange={(v) => uf("notes", v)} multiline />
                 {/* Grade Tracking */}
