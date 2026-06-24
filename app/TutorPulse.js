@@ -736,7 +736,7 @@ export default function TutorPulse() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           max_tokens: 1000,
           system: context,
           messages: messages,
@@ -2544,32 +2544,7 @@ export default function TutorPulse() {
           const invoices = buildAllInvoices(sid);
           if (invoices.length === 0) return "";
           const first = invoices[0];
-          // ── DIAGNOSTIC (temporary) ──────────────────────────────
-          let diag = "🔍 DIAGNOSTIC (remove later)\n";
-          diag += "Invoice month: " + invoiceMonth + "\n";
-          invoices.forEach(inv => {
-            const withComments = inv.monthLessons.filter(l => l.comment && l.comment.trim());
-            diag += inv.student.name + ": " + inv.monthLessons.length + " lessons in month, " + withComments.length + " with feedback\n";
-            inv.monthLessons.forEach(l => {
-              const d = new Date(l.date);
-              diag += "  • " + d.toLocaleDateString("en-SG", { day: "numeric", month: "short" }) + " [" + l.status + "] comment=" + (l.comment ? '"' + l.comment.substring(0, 30) + '"' : "EMPTY") + "\n";
-            });
-          });
-          // Also check ALL lessons this student has for that month regardless of filters
-          invoices.forEach(inv => {
-            const [iy, imo] = invoiceMonth.split("-").map(Number);
-            const allForMonth = store.lessons.filter(l => { const d = new Date(l.date); return l.studentId === inv.student.id && d.getMonth() === imo - 1 && d.getFullYear() === iy; });
-            const excludedCount = allForMonth.length - inv.monthLessons.length;
-            if (excludedCount > 0) {
-              diag += inv.student.name + ": " + excludedCount + " lesson(s) EXCLUDED from invoice:\n";
-              allForMonth.filter(l => !inv.monthLessons.find(ml => ml.id === l.id)).forEach(l => {
-                diag += "  ✗ [" + l.status + "] waive=" + (l.excludeFromBilling || false) + " comment=" + (l.comment ? "YES" : "no") + "\n";
-              });
-            }
-          });
-          diag += "─────────────\n\n";
-
-          let msg = diag + "Hi " + first.student.parent + ",\n\n";
+          let msg = "Hi " + first.student.parent + ",\n\n";
           let grandTotal = 0;
           invoices.forEach((inv, i) => {
             if (invoices.length > 1) msg += "\u2014\u2014\u2014 " + inv.student.name + " \u2014\u2014\u2014\n\n";
@@ -2823,7 +2798,7 @@ export default function TutorPulse() {
           try {
             for (const p of aiResult) {
               if (p.prompt) {
-                const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: p.prompt }] }) });
+                const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: p.prompt }] }) });
                 const data = await response.json();
                 const summary = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
                 msg = msg.replace(p.placeholder, summary ? (p.placeholder.includes("SUMMARY") ? "\uD83D\uDCCA *Monthly Progress:*\n" + summary : summary) : "(No feedback recorded)");
@@ -2865,7 +2840,7 @@ export default function TutorPulse() {
         const response = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+          body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
         });
         const data = await response.json();
         const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
@@ -2978,7 +2953,7 @@ export default function TutorPulse() {
                   if (inv) context = "Student: " + inv.student.name + ", Level: " + inv.student.level + ", Parent: " + inv.student.parent + ", Lessons this month: " + inv.totalSessions + ", Fee: $" + inv.totalFee;
                 }
                 const fullPrompt = "You are " + tName + ", a tutor. " + (context ? "Context: " + context + ". " : "") + "Write a WhatsApp message based on this request: " + customPrompt + "\n\nKeep it warm and professional. Just the message, no preamble.";
-                const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: fullPrompt }] }) });
+                const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: fullPrompt }] }) });
                 const data = await res.json();
                 const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
                 setMsgText(text || "AI couldn't generate. Try again.");
@@ -3006,7 +2981,7 @@ export default function TutorPulse() {
                 if (!currentTxt) return;
                 setMsgGenerating(true);
                 try {
-                  const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
+                  const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
                   const data = await res.json();
                   const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
                   if (text) { setMsgText(text); addToast("Translated to " + lang.split(" (")[0]); }
