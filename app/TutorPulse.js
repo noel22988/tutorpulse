@@ -872,37 +872,6 @@ export default function TutorPulse() {
       </div>
 
 
-      {/* Quick Actions */}
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif", marginBottom: 12 }}>Quick Actions</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Card hover onClick={() => setShowNewLesson(true)} style={{ padding: 16, textAlign: "center" }}>
-            <Icon name="plus" size={24} color={theme.accent} />
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>New Lesson</div>
-          </Card>
-          <Card hover onClick={() => setShowNewStudent(true)} style={{ padding: 16, textAlign: "center" }}>
-            <Icon name="users" size={24} color={theme.info} />
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Add Student</div>
-          </Card>
-          <Card hover onClick={() => setShowAI(true)} style={{ padding: 16, textAlign: "center" }}>
-            <Icon name="ai" size={24} color={theme.purple} />
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>AI Assistant</div>
-          </Card>
-          <Card hover onClick={() => setShowMessageCompose("bulk")} style={{ padding: 16, textAlign: "center" }}>
-            <Icon name="send" size={24} color={theme.success} />
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Fee Reminder</div>
-          </Card>
-          <Card hover onClick={() => { setBroadcastClassId(null); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); setBroadcastMsg(""); setShowBroadcast(true); }} style={{ padding: 16, textAlign: "center" }}>
-            <Icon name="message" size={24} color={theme.warning} />
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Broadcast</div>
-          </Card>
-          <Card hover onClick={() => { setStudentsTab("classes"); setShowNewClass(true); setPage("students"); }} style={{ padding: 16, textAlign: "center" }}>
-            <Icon name="users" size={24} color={theme.purple} />
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Add Class</div>
-          </Card>
-        </div>
-      </div>
-
       {/* Today's Schedule */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -934,6 +903,37 @@ export default function TutorPulse() {
             })}
           </div>
         )}
+      </div>
+
+      {/* Quick Actions */}
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Playfair Display', serif", marginBottom: 12 }}>Quick Actions</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Card hover onClick={() => setShowNewLesson(true)} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="plus" size={24} color={theme.accent} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>New Lesson</div>
+          </Card>
+          <Card hover onClick={() => setShowNewStudent(true)} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="users" size={24} color={theme.info} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Add Student</div>
+          </Card>
+          <Card hover onClick={() => setShowAI(true)} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="ai" size={24} color={theme.purple} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>AI Assistant</div>
+          </Card>
+          <Card hover onClick={() => setShowMessageCompose("bulk")} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="send" size={24} color={theme.success} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Fee Reminder</div>
+          </Card>
+          <Card hover onClick={() => { setBroadcastClassId(null); setBroadcastRecipients(new Set()); setBroadcastSentIdx(-1); setBroadcastMsg(""); setShowBroadcast(true); }} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="message" size={24} color={theme.warning} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Broadcast</div>
+          </Card>
+          <Card hover onClick={() => { setStudentsTab("classes"); setShowNewClass(true); setPage("students"); }} style={{ padding: 16, textAlign: "center" }}>
+            <Icon name="users" size={24} color={theme.purple} />
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Add Class</div>
+          </Card>
+        </div>
       </div>
 
       {/* Alerts */}
