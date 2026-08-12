@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "sheetjs";
 
 // ═══════════════════════════════════════════════════════════════
 // TUTORPULSE — Intelligent Tutor Scheduling & Fee Management
@@ -20,9 +18,9 @@ const createStore = () => {
 // ── Persistence helpers ─────────────────────────────────────
 const loadStore = async () => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
+    const result = await window.storage.get(STORAGE_KEY);
+    if (result && result.value) {
+      return JSON.parse(result.value);
     }
   } catch (e) {
     // Key doesn't exist yet or storage unavailable
@@ -32,7 +30,7 @@ const loadStore = async () => {
 
 const saveStore = async (data) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    await window.storage.set(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
     console.error("Failed to save:", e);
   }
@@ -548,6 +546,7 @@ export default function TutorPulse() {
   const [searchQuery, setSearchQuery] = useState("");
   const [studentFilter, setStudentFilter] = useState("all");
   const searchRef = useRef("");
+  const revenueDraftRef = useRef({});
   const [scheduleViewMode, setScheduleViewMode] = useState("today");
   const [schedCalOpen, setSchedCalOpen] = useState(false);
   const [schedNavDate, setSchedNavDate] = useState(new Date()); // nav anchor for today/week/month views
@@ -732,7 +731,7 @@ export default function TutorPulse() {
       }, 0);
       const context = `You are TutorPulse AI, an assistant for ${tutorName} who runs a tuition business. Current month: ${now.toLocaleDateString("en-SG", { month: "long", year: "numeric" })}. Total active students: ${activeStudents.length}. Projected monthly revenue: $${totalRevenue.toFixed(2)}. Unpaid this month: ${pendingPayments.length}. Student details: ${studentDetails}. Respond concisely and helpfully. Do not use markdown formatting like ** or # or *.`;
       const messages = isFollowUp ? [...aiConversation, { role: "user", content: prompt }] : [{ role: "user", content: prompt }];
-      const response = await fetch("/api/ai", {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1315,12 +1314,15 @@ export default function TutorPulse() {
 
     // Auto-generate payment entries for active students who have lessons this month
     const monthPayments = useMemo(() => {
-      const activeIds = store.students.filter(s => s.status === "active" || s.status === "trial").map(s => s.id);
+      // A student appears in a month's fees list if they had real lessons that month,
+      // regardless of current status — graduating a student must not erase unbilled
+      // months they actually attended. Trial students are still shown; only fully
+      // deleted students (no getStudent) are excluded downstream.
       const studentsWithLessons = new Set();
       store.lessons.forEach(l => {
         const d = new Date(l.date);
         const lMonth = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
-        if (lMonth === monthView && l.status !== "cancelled" && activeIds.includes(l.studentId)) {
+        if (lMonth === monthView && l.status !== "cancelled") {
           studentsWithLessons.add(l.studentId);
         }
       });
@@ -1329,6 +1331,7 @@ export default function TutorPulse() {
       const entries = [];
       Array.from(studentsWithLessons).forEach(sid => {
         const s = getStudent(sid);
+        if (!s) return; // student was deleted — skip orphaned lessons/payments
         const isPerLesson = s && s.paymentMode === "per_lesson";
 
         if (isPerLesson) {
@@ -2218,27 +2221,49 @@ export default function TutorPulse() {
                   const existing = history.find(h => h.month === key);
                   months.push({ key, label, amount: existing ? existing.amount : "" });
                 }
-                return months.map((m) => (
-                  <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: theme.textSecondary, width: 70, flexShrink: 0 }}>{m.label}</span>
-                    <span style={{ fontSize: 13, color: theme.textMuted }}>$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="0"
-                      defaultValue={m.amount}
-                      onBlur={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setStore((s) => {
-                          const hist = (s.revenueHistory || []).filter(h => h.month !== m.key);
+                const savedTotal = months.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0);
+                const savedCount = months.filter(m => (parseFloat(m.amount) || 0) > 0).length;
+                return (
+                  <>
+                    {months.map((m) => (
+                      <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: theme.textSecondary, width: 70, flexShrink: 0 }}>{m.label}</span>
+                        <span style={{ fontSize: 13, color: theme.textMuted }}>$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder="0"
+                          defaultValue={revenueDraftRef.current[m.key] !== undefined ? revenueDraftRef.current[m.key] : m.amount}
+                          onChange={(e) => { revenueDraftRef.current[m.key] = e.target.value; }}
+                          style={{ flex: 1, padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}
+                        />
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, marginTop: 4, borderTop: "1px solid " + theme.border }}>
+                      <span style={{ fontSize: 12, color: theme.textMuted }}>Saved total ({savedCount} month{savedCount === 1 ? "" : "s"})</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: theme.accent, fontFamily: "'DM Sans', sans-serif" }}>{"$" + savedTotal.toFixed(2)}</span>
+                    </div>
+                    <Button size="sm" icon="check" onClick={() => {
+                      const drafts = revenueDraftRef.current;
+                      if (Object.keys(drafts).length === 0) { addToast("Nothing new to save"); return; }
+                      setStore((s) => {
+                        let hist = [...(s.revenueHistory || [])];
+                        months.forEach((m) => {
+                          const draft = drafts[m.key];
+                          if (draft === undefined) return;
+                          const val = parseFloat(draft) || 0;
+                          hist = hist.filter(h => h.month !== m.key);
                           if (val > 0) hist.push({ month: m.key, amount: val });
-                          return { ...s, revenueHistory: hist };
                         });
-                      }}
-                      style={{ flex: 1, padding: "6px 10px", background: theme.bgInput, border: "1px solid " + theme.border, borderRadius: 8, color: theme.text, outline: "none", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}
-                    />
-                  </div>
-                ));
+                        return { ...s, revenueHistory: hist };
+                      });
+                      revenueDraftRef.current = {};
+                      addToast("Revenue saved");
+                    }} style={{ marginTop: 10, width: "100%" }}>Save Revenue</Button>
+                    <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 6, textAlign: "center" }}>Enter all months, then tap Save. Saved figures override the auto-calculated chart.</div>
+                  </>
+                );
               })()}
             </Card>
 
@@ -2798,7 +2823,7 @@ export default function TutorPulse() {
           try {
             for (const p of aiResult) {
               if (p.prompt) {
-                const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: p.prompt }] }) });
+                const response = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: p.prompt }] }) });
                 const data = await response.json();
                 const summary = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
                 msg = msg.replace(p.placeholder, summary ? (p.placeholder.includes("SUMMARY") ? "\uD83D\uDCCA *Monthly Progress:*\n" + summary : summary) : "(No feedback recorded)");
@@ -2837,7 +2862,7 @@ export default function TutorPulse() {
         const prompt = isBulk
           ? "Generate a polite WhatsApp fee collection message with [Student Name] and [Amount] placeholders. Sign off as " + tName + ". Under 100 words. Just the message."
           : "Generate a polite WhatsApp fee message using this data: " + aiContext + ". Include lesson dates, session feedback notes if available, fee breakdown, total due. Sign off as " + tName + ". Just the message, no preamble.";
-        const response = await fetch("/api/ai", {
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
@@ -2953,7 +2978,7 @@ export default function TutorPulse() {
                   if (inv) context = "Student: " + inv.student.name + ", Level: " + inv.student.level + ", Parent: " + inv.student.parent + ", Lessons this month: " + inv.totalSessions + ", Fee: $" + inv.totalFee;
                 }
                 const fullPrompt = "You are " + tName + ", a tutor. " + (context ? "Context: " + context + ". " : "") + "Write a WhatsApp message based on this request: " + customPrompt + "\n\nKeep it warm and professional. Just the message, no preamble.";
-                const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: fullPrompt }] }) });
+                const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: fullPrompt }] }) });
                 const data = await res.json();
                 const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
                 setMsgText(text || "AI couldn't generate. Try again.");
@@ -2981,7 +3006,7 @@ export default function TutorPulse() {
                 if (!currentTxt) return;
                 setMsgGenerating(true);
                 try {
-                  const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
+                  const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
                   const data = await res.json();
                   const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
                   if (text) { setMsgText(text); addToast("Translated to " + lang.split(" (")[0]); }
