@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import * as XLSX from "sheetjs";
+import * as XLSX from "xlsx";
 
 // ═══════════════════════════════════════════════════════════════
 // TUTORPULSE — Intelligent Tutor Scheduling & Fee Management
@@ -18,9 +20,9 @@ const createStore = () => {
 // ── Persistence helpers ─────────────────────────────────────
 const loadStore = async () => {
   try {
-    const result = await window.storage.get(STORAGE_KEY);
-    if (result && result.value) {
-      return JSON.parse(result.value);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
     }
   } catch (e) {
     // Key doesn't exist yet or storage unavailable
@@ -30,7 +32,7 @@ const loadStore = async () => {
 
 const saveStore = async (data) => {
   try {
-    await window.storage.set(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
     console.error("Failed to save:", e);
   }
@@ -732,7 +734,7 @@ export default function TutorPulse() {
       }, 0);
       const context = `You are TutorPulse AI, an assistant for ${tutorName} who runs a tuition business. Current month: ${now.toLocaleDateString("en-SG", { month: "long", year: "numeric" })}. Total active students: ${activeStudents.length}. Projected monthly revenue: $${totalRevenue.toFixed(2)}. Unpaid this month: ${pendingPayments.length}. Student details: ${studentDetails}. Respond concisely and helpfully. Do not use markdown formatting like ** or # or *.`;
       const messages = isFollowUp ? [...aiConversation, { role: "user", content: prompt }] : [{ role: "user", content: prompt }];
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2842,7 +2844,7 @@ export default function TutorPulse() {
           try {
             for (const p of aiResult) {
               if (p.prompt) {
-                const response = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: p.prompt }] }) });
+                const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: p.prompt }] }) });
                 const data = await response.json();
                 const summary = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
                 msg = msg.replace(p.placeholder, summary ? (p.placeholder.includes("SUMMARY") ? "\uD83D\uDCCA *Monthly Progress:*\n" + summary : summary) : "(No feedback recorded)");
@@ -2881,7 +2883,7 @@ export default function TutorPulse() {
         const prompt = isBulk
           ? "Generate a polite WhatsApp fee collection message with [Student Name] and [Amount] placeholders. Sign off as " + tName + ". Under 100 words. Just the message."
           : "Generate a polite WhatsApp fee message using this data: " + aiContext + ". Include lesson dates, session feedback notes if available, fee breakdown, total due. Sign off as " + tName + ". Just the message, no preamble.";
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
+        const response = await fetch("/api/ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
@@ -2997,7 +2999,7 @@ export default function TutorPulse() {
                   if (inv) context = "Student: " + inv.student.name + ", Level: " + inv.student.level + ", Parent: " + inv.student.parent + ", Lessons this month: " + inv.totalSessions + ", Fee: $" + inv.totalFee;
                 }
                 const fullPrompt = "You are " + tName + ", a tutor. " + (context ? "Context: " + context + ". " : "") + "Write a WhatsApp message based on this request: " + customPrompt + "\n\nKeep it warm and professional. Just the message, no preamble.";
-                const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: fullPrompt }] }) });
+                const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: fullPrompt }] }) });
                 const data = await res.json();
                 const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
                 setMsgText(text || "AI couldn't generate. Try again.");
@@ -3025,7 +3027,7 @@ export default function TutorPulse() {
                 if (!currentTxt) return;
                 setMsgGenerating(true);
                 try {
-                  const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
+                  const res = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: "Translate this message to " + lang.split(" (")[0] + ". Keep emoji and formatting. Just the translation, no preamble:\n\n" + currentTxt }] }) });
                   const data = await res.json();
                   const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
                   if (text) { setMsgText(text); addToast("Translated to " + lang.split(" (")[0]); }
