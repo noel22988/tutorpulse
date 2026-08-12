@@ -498,6 +498,7 @@ export default function TutorPulse() {
   const [page, setPage] = useState("home");
   const [showNotif, setShowNotif] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [statusMenuFor, setStatusMenuFor] = useState(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [showNewLesson, setShowNewLesson] = useState(false);
   const [prefillStudentId, setPrefillStudentId] = useState(null);
@@ -1214,7 +1215,25 @@ export default function TutorPulse() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{student.name}</span>
-                    <Badge text={student.status} color={getStatusColor(student.status)} bg={getStatusBg(student.status)} />
+                    <div style={{ position: "relative" }}>
+                      <button onClick={(e) => { e.stopPropagation(); setStatusMenuFor(statusMenuFor === student.id ? null : student.id); }} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 2 }}>
+                        <Badge text={student.status} color={getStatusColor(student.status)} bg={getStatusBg(student.status)} />
+                        <Icon name="chevDown" size={11} color={theme.textMuted} />
+                      </button>
+                      {statusMenuFor === student.id && (
+                        <>
+                          <div onClick={(e) => { e.stopPropagation(); setStatusMenuFor(null); }} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                          <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: theme.bgElevated, border: "1px solid " + theme.border, borderRadius: 10, padding: 4, zIndex: 41, minWidth: 130, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+                            {["active", "trial", "paused", "graduated"].map((st) => (
+                              <button key={st} onClick={(e) => { e.stopPropagation(); if (st !== student.status) { updateStudent(student.id, { status: st }); addToast(student.name + " → " + st); } setStatusMenuFor(null); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 10px", background: st === student.status ? theme.accentBg : "transparent", border: "none", borderRadius: 7, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: st === student.status ? theme.accent : theme.textSecondary, textTransform: "capitalize", fontWeight: st === student.status ? 700 : 500, textAlign: "left" }}>
+                                <span style={{ width: 8, height: 8, borderRadius: "50%", background: getStatusColor(st), flexShrink: 0 }} />
+                                {st}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div style={{ fontSize: 12, color: theme.textSecondary }}>{student.level} {(student.subjects || []).length > 0 ? student.subjects.map(s => s.subject + (s.stream ? " (" + s.stream + ")" : "")).join(", ") : (student.subject || "")}</div>
                 </div>
